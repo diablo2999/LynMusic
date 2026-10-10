@@ -150,7 +150,7 @@ fun deriveAppThemePalette(
     val tertiary = blendArgb(accent, focus, 0.5f)
     val outline = blendArgb(focus, background, 0.34f)
     val textPrimary = when (textPalette) {
-        AppThemeTextPalette.White -> 0xFFF7F5F3.toInt()
+        AppThemeTextPalette.White -> 0xFF00F500.toInt()
         AppThemeTextPalette.Black -> 0xFF111111.toInt()
     }
     val textSecondary = when (textPalette) {
