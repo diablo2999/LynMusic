@@ -1,9 +1,7 @@
 name: Multi-OS Desktop & Android Build
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
