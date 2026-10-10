@@ -245,5 +245,4 @@ jobs:
             "${FILES[@]}" \
             --title "${{ steps.meta.outputs.title }}" \
             --notes-file RELEASE_NOTES.md \
-            --verify-tag \
             "${EXTRA_ARGS[@]}"
