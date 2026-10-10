@@ -206,9 +206,9 @@ object LyricsShareArtworkTintSpec {
     const val META_FONT_SIZE_PX: Float = 34f
     const val BRAND_FONT_SIZE_PX: Float = 30f
     const val DEFAULT_BACKGROUND_ARGB: Int = 0xFF232325.toInt()
-    const val TEXT_PRIMARY_ARGB: Int = 0xFFFFFFFF.toInt()
-    const val TEXT_FOOTER_ARGB: Int = 0xD9FFFFFF.toInt()
-    const val TEXT_SECONDARY_ARGB: Int = 0x99FFFFFF.toInt()
+    const val TEXT_PRIMARY_ARGB: Int = 0xFF00FF00.toInt()
+    const val TEXT_FOOTER_ARGB: Int = 0xD900FF00.toInt()
+    const val TEXT_SECONDARY_ARGB: Int = 0x9900FF00.toInt()
     const val PLACEHOLDER_ARGB: Int = 0x22FFFFFF
     const val ARTWORK_SHADOW_ARGB: Int = 0x33000000
 
