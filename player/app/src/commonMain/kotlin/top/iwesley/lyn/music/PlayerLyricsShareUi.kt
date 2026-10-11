@@ -354,6 +354,14 @@ internal fun PlayerLyricsPane(
                         pure -> 6.dp
                         else -> 4.dp
                     }
+                    val highlightedLyricsStyle = MaterialTheme.typography.headlineSmall.copy(
+                        fontSize = (24f * lyricsFontScale).sp,
+                        lineHeight = (32f * lyricsFontScale).sp,
+                    )
+                    val normalLyricsStyle = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = (22f * lyricsFontScale).sp,
+                        lineHeight = (28f * lyricsFontScale).sp,
+                    )
                     LazyColumn(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
@@ -421,7 +429,7 @@ internal fun PlayerLyricsPane(
                                             currentPositionMs = activeLyricsPositionMs,
                                             activeColor = animatedColor,
                                             inactiveColor = lyricsSecondaryTextColor.copy(alpha = 0.78f),
-                                            style = MaterialTheme.typography.headlineLarge,
+                                            style = highlightedLyricsStyle,
                                             textAlign = TextAlign.Center,
                                             fontWeight = FontWeight.Bold,
                                             modifier = Modifier.fillMaxWidth(),
@@ -429,7 +437,7 @@ internal fun PlayerLyricsPane(
                                     } else {
                                         Text(
                                             text = line.text,
-                                            style = if (isHighlighted) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.titleLarge,
+                                            style = if (isHighlighted) highlightedLyricsStyle else normalLyricsStyle,
                                             color = animatedColor,
                                             textAlign = TextAlign.Center,
                                             fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Normal,
@@ -451,7 +459,7 @@ internal fun PlayerLyricsPane(
                                     currentPositionMs = activeLyricsPositionMs,
                                     activeColor = animatedColor,
                                     inactiveColor = lyricsSecondaryTextColor.copy(alpha = 0.78f),
-                                    style = MaterialTheme.typography.headlineLarge,
+                                    style = highlightedLyricsStyle,
                                     textAlign = TextAlign.Center,
                                     fontWeight = FontWeight.Bold,
                                     modifier = lineModifier,
@@ -459,7 +467,7 @@ internal fun PlayerLyricsPane(
                             } else {
                                 Text(
                                     text = line.text,
-                                    style = if (isHighlighted) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.titleLarge,
+                                    style = if (isHighlighted) highlightedLyricsStyle else normalLyricsStyle,
                                     color = animatedColor,
                                     textAlign = TextAlign.Center,
                                     fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Normal,
@@ -1401,7 +1409,7 @@ internal fun LyricsShareOverlay(
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(
                                     uiString(Res.string.lyrics_share_action),
-                                    style = MaterialTheme.typography.headlineLarge,
+                                    style = highlightedLyricsStyle,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = primaryTextColor,
                                 )
@@ -2667,7 +2675,7 @@ private fun LyricsShareNoteCard(
                     model.lyricsLines.forEach { line ->
                         Text(
                             text = line,
-                            style = MaterialTheme.typography.headlineLarge,
+                            style = highlightedLyricsStyle,
                             fontWeight = FontWeight.SemiBold,
                             color = primaryTextColor,
                             fontFamily = previewFontFamily,
@@ -2807,7 +2815,7 @@ private fun LyricsShareArtworkTintCard(
                     model.lyricsLines.forEach { line ->
                         Text(
                             text = line,
-                            style = MaterialTheme.typography.headlineLarge,
+                            style = highlightedLyricsStyle,
                             fontWeight = FontWeight.SemiBold,
                             color = primaryTextColor,
                             fontFamily = previewFontFamily,
