@@ -354,6 +354,7 @@ internal fun PlayerLyricsPane(
                         pure -> 6.dp
                         else -> 4.dp
                     }
+                    val lyricsFontScale = lyricsFontSizePreset.scale
                     val highlightedLyricsStyle = MaterialTheme.typography.headlineSmall.copy(
                         fontSize = (24f * lyricsFontScale).sp,
                         lineHeight = (32f * lyricsFontScale).sp,
