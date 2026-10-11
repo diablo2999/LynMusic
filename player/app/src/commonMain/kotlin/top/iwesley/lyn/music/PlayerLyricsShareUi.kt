@@ -341,8 +341,8 @@ internal fun PlayerLyricsPane(
                         state.snapshot.positionMs + lyrics.offsetMs
                     }
                     val lyricsMaxWidth = when {
-                        compact -> 540.dp
-                        pure -> 600.dp
+                        compact -> 640.dp
+                        pure -> 700.dp
                         else -> 520.dp
                     }
                     val lyricsLineSpacing = when {
@@ -356,12 +356,12 @@ internal fun PlayerLyricsPane(
                         else -> 4.dp
                     }
                   val highlightedLyricsStyle = MaterialTheme.typography.headlineSmall.copy(
-                        fontSize =  100.sp,
-                        lineHeight = 110.sp,
+                        fontSize =  60.sp,
+                        lineHeight = 65.sp,
                     )
                     val normalLyricsStyle = MaterialTheme.typography.titleLarge.copy(
-                        fontSize = 80.sp,
-                        lineHeight = 90.sp,
+                        fontSize = 50.sp,
+                        lineHeight = 55.sp,
                     )
                     LazyColumn(
                         modifier = Modifier
