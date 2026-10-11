@@ -356,12 +356,12 @@ internal fun PlayerLyricsPane(
                         else -> 4.dp
                     }
                   val highlightedLyricsStyle = MaterialTheme.typography.headlineSmall.copy(
-                        fontSize =  24.sp,
-                        lineHeight = 32.sp,
+                        fontSize =  100.sp,
+                        lineHeight = 110.sp,
                     )
                     val normalLyricsStyle = MaterialTheme.typography.titleLarge.copy(
-                        fontSize = 22.sp,
-                        lineHeight = 28.sp,
+                        fontSize = 80.sp,
+                        lineHeight = 90.sp,
                     )
                     LazyColumn(
                         modifier = Modifier
