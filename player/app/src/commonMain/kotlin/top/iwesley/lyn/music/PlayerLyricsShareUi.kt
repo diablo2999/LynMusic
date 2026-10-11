@@ -1410,7 +1410,7 @@ internal fun LyricsShareOverlay(
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(
                                     uiString(Res.string.lyrics_share_action),
-                                    style = highlightedLyricsStyle,
+                                    style = MaterialTheme.typography.headlineLarge,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = primaryTextColor,
                                 )
@@ -2676,7 +2676,7 @@ private fun LyricsShareNoteCard(
                     model.lyricsLines.forEach { line ->
                         Text(
                             text = line,
-                            style = highlightedLyricsStyle,
+                            style = MaterialTheme.typography.headlineLarge,
                             fontWeight = FontWeight.SemiBold,
                             color = primaryTextColor,
                             fontFamily = previewFontFamily,
@@ -2816,7 +2816,7 @@ private fun LyricsShareArtworkTintCard(
                     model.lyricsLines.forEach { line ->
                         Text(
                             text = line,
-                            style = highlightedLyricsStyle,
+                            style = MaterialTheme.typography.headlineLarge,
                             fontWeight = FontWeight.SemiBold,
                             color = primaryTextColor,
                             fontFamily = previewFontFamily,
