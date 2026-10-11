@@ -354,14 +354,13 @@ internal fun PlayerLyricsPane(
                         pure -> 6.dp
                         else -> 4.dp
                     }
-                    val lyricsFontScale = lyricsFontSizePreset.scale
-                    val highlightedLyricsStyle = MaterialTheme.typography.headlineSmall.copy(
-                        fontSize = (24f * lyricsFontScale).sp,
-                        lineHeight = (32f * lyricsFontScale).sp,
+                  val highlightedLyricsStyle = MaterialTheme.typography.headlineSmall.copy(
+                        fontSize =  24.sp,
+                        lineHeight = 32.sp,
                     )
                     val normalLyricsStyle = MaterialTheme.typography.titleLarge.copy(
-                        fontSize = (22f * lyricsFontScale).sp,
-                        lineHeight = (28f * lyricsFontScale).sp,
+                        fontSize = 22.sp,
+                        lineHeight = 28.sp,
                     )
                     LazyColumn(
                         modifier = Modifier
