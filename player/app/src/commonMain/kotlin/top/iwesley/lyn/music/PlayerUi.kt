@@ -50,7 +50,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.FormatPaint
@@ -2415,76 +2417,92 @@ private fun CompactPlayerMoreSheet(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                CompactPlayerMoreSheetRow(
-                    icon = Icons.Rounded.FormatPaint,
-                    title = uiString(Res.string.player_lyrics_style),
-                    value = "${uiString(Res.string.player_lyrics_highlight)} · ${uiString(Res.string.player_lyrics_size)} · ${uiString(Res.string.player_lyrics_font)}",
-                    enabled = true,
-                    onClick = onOpenLyricsStyle,
-                )
-                currentPlaybackAudioQuality?.let { qualityText ->
+                Column(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
                     CompactPlayerMoreSheetRow(
-                        icon = Icons.Rounded.GraphicEq,
-                        title = uiString(Res.string.player_current_quality_label),
-                        value = qualityText,
+                        icon = Icons.Rounded.FormatPaint,
+                        title = uiString(Res.string.player_lyrics_style),
+                        value = "${uiString(Res.string.player_lyrics_highlight)} · ${uiString(Res.string.player_lyrics_size)} · ${uiString(Res.string.player_lyrics_font)}",
                         enabled = true,
-                        clickable = false,
-                        onClick = {},
+                        onClick = onOpenLyricsStyle,
+                        verticalPadding = 10.dp,
+                    )
+                    currentPlaybackAudioQuality?.let { qualityText ->
+                        CompactPlayerMoreSheetRow(
+                            icon = Icons.Rounded.GraphicEq,
+                            title = uiString(Res.string.player_current_quality_label),
+                            value = qualityText,
+                            enabled = true,
+                            clickable = false,
+                            onClick = {},
+                            verticalPadding = 10.dp,
+                        )
+                    }
+                    if (showEqualizerEntry) {
+                        CompactPlayerMoreSheetRow(
+                            icon = Icons.Rounded.GraphicEq,
+                            title = uiString(Res.string.settings_equalizer_title),
+                            value = uiString(Res.string.player_sound_settings_title),
+                            enabled = true,
+                            onClick = onOpenEqualizer,
+                            verticalPadding = 10.dp,
+                        )
+                    }
+                    CompactPlayerMoreSheetRow(
+                        icon = Icons.Rounded.Cast,
+                        title = uiString(Res.string.player_cast_action),
+                        value = castMessage ?: castSessionStatusText(castState).displayText(),
+                        enabled = true,
+                        onClick = onOpenCast,
+                        verticalPadding = 10.dp,
+                    )
+                    if (showOfflineDownload) {
+                        CompactPlayerMoreSheetRow(
+                            icon = Icons.Rounded.Download,
+                            title = uiString(Res.string.player_offline_downloads_title),
+                            value = offlineDownloadStatus,
+                            enabled = true,
+                            onClick = onOpenOfflineDownload,
+                            verticalPadding = 10.dp,
+                        )
+                    }
+                    CompactPlayerMoreSheetRow(
+                        icon = Icons.Rounded.Person,
+                        title = uiString(Res.string.common_artist),
+                        value = compactPlayerMoreArtistLabel(snapshot, track),
+                        enabled = artistTarget != null,
+                        onClick = { artistTarget?.let(onOpenLibraryNavigationTarget) },
+                        verticalPadding = 10.dp,
+                    )
+                    CompactPlayerMoreSheetRow(
+                        icon = Icons.Rounded.Album,
+                        title = uiString(Res.string.library_albums_title),
+                        value = compactPlayerMoreAlbumLabel(snapshot, track),
+                        enabled = albumTarget != null,
+                        onClick = { albumTarget?.let(onOpenLibraryNavigationTarget) },
+                        verticalPadding = 10.dp,
+                    )
+                    CompactPlayerMoreSheetRow(
+                        icon = Icons.Rounded.Add,
+                        title = uiString(Res.string.playlist_add_track),
+                        value = uiString(Res.string.playlist_save_action),
+                        enabled = true,
+                        onClick = onOpenAddToPlaylist,
+                        verticalPadding = 10.dp,
+                    )
+                    CompactPlayerMoreSheetRow(
+                        icon = Icons.Rounded.Timer,
+                        title = uiString(Res.string.player_sleep_timer_title),
+                        value = sleepTimerStatusText(sleepTimer),
+                        enabled = true,
+                        onClick = onOpenSleepTimer,
+                        verticalPadding = 10.dp,
                     )
                 }
-                if (showEqualizerEntry) {
-                    CompactPlayerMoreSheetRow(
-                        icon = Icons.Rounded.GraphicEq,
-                        title = uiString(Res.string.settings_equalizer_title),
-                        value = uiString(Res.string.player_sound_settings_title),
-                        enabled = true,
-                        onClick = onOpenEqualizer,
-                    )
-                }
-                CompactPlayerMoreSheetRow(
-                    icon = Icons.Rounded.Cast,
-                    title = uiString(Res.string.player_cast_action),
-                    value = castMessage ?: castSessionStatusText(castState).displayText(),
-                    enabled = true,
-                    onClick = onOpenCast,
-                )
-                if (showOfflineDownload) {
-                    CompactPlayerMoreSheetRow(
-                        icon = Icons.Rounded.Download,
-                        title = uiString(Res.string.player_offline_downloads_title),
-                        value = offlineDownloadStatus,
-                        enabled = true,
-                        onClick = onOpenOfflineDownload,
-                    )
-                }
-                CompactPlayerMoreSheetRow(
-                    icon = Icons.Rounded.Person,
-                    title = uiString(Res.string.common_artist),
-                    value = compactPlayerMoreArtistLabel(snapshot, track),
-                    enabled = artistTarget != null,
-                    onClick = { artistTarget?.let(onOpenLibraryNavigationTarget) },
-                )
-                CompactPlayerMoreSheetRow(
-                    icon = Icons.Rounded.Album,
-                    title = uiString(Res.string.library_albums_title),
-                    value = compactPlayerMoreAlbumLabel(snapshot, track),
-                    enabled = albumTarget != null,
-                    onClick = { albumTarget?.let(onOpenLibraryNavigationTarget) },
-                )
-                CompactPlayerMoreSheetRow(
-                    icon = Icons.Rounded.Add,
-                    title = uiString(Res.string.playlist_add_track),
-                    value = uiString(Res.string.playlist_save_action),
-                    enabled = true,
-                    onClick = onOpenAddToPlaylist,
-                )
-                CompactPlayerMoreSheetRow(
-                    icon = Icons.Rounded.Timer,
-                    title = uiString(Res.string.player_sleep_timer_title),
-                    value = sleepTimerStatusText(sleepTimer),
-                    enabled = true,
-                    onClick = onOpenSleepTimer,
-                )
             }
         }
     }
@@ -2903,6 +2921,7 @@ private fun CompactPlayerMoreSheetRow(
     enabled: Boolean,
     onClick: () -> Unit,
     clickable: Boolean = enabled,
+    verticalPadding: Dp = 14.dp,
 ) {
     val shellColors = mainShellColors
     val contentColor = if (enabled) {
@@ -2921,7 +2940,8 @@ private fun CompactPlayerMoreSheetRow(
             .clip(RoundedCornerShape(18.dp))
             .background(shellColors.cardContainer.copy(alpha = if (enabled) 0.82f else 0.38f))
             .then(rowModifier)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .heightIn(min = 48.dp)
+            .padding(horizontal = 16.dp, vertical = verticalPadding),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
