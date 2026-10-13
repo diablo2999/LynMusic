@@ -954,14 +954,10 @@ suspend fun requestNavidromeLyrics(
         artistName = track.artistName,
         logger = logger,
     ) ?: return null
-    val lines = parseLrc(payload).ifEmpty { parsePlainText(payload) }
-    if (lines.isEmpty()) return null
-    val document = LyricsDocument(
-        lines = lines,
-        offsetMs = 0L,
+    val document = parseCachedLyrics(
         sourceId = lyricsSourceIdFor(source.sourceType),
         rawPayload = payload,
-    )
+    ) ?: return null
     logger.log(
         level = DiagnosticLogLevel.INFO,
         tag = source.logTag,

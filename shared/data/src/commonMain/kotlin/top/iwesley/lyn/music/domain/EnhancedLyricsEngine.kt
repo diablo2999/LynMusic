@@ -147,17 +147,11 @@ internal fun parseStructuredLyricsPayload(rawPayload: String): ParsedStructuredL
     val mergedEntries = mergeAdjacentTranslatedEslrcLines(documentLines.zip(displayLineDrafts))
     val orderedEntries = mergedEntries
         .withIndex()
-        .let { indexedEntries ->
-            if (mergedEntries.all { it.first.timestampMs != null }) {
-                indexedEntries.sortedWith(
-                    compareBy<IndexedValue<Pair<LyricsLine, ParsedDisplayLineDraft>>> {
-                        it.value.first.timestampMs ?: Long.MAX_VALUE
-                    }.thenBy { it.index },
-                )
-            } else {
-                indexedEntries
-            }
-        }
+        .sortedWith(
+            compareBy<IndexedValue<Pair<LyricsLine, ParsedDisplayLineDraft>>> {
+                it.value.first.timestampMs ?: Long.MAX_VALUE
+            }.thenBy { it.index },
+        )
         .map { it.value }
     val orderedDocumentLines = orderedEntries.map { it.first }
     val orderedDisplayLineDrafts = orderedEntries.map { it.second }
@@ -316,14 +310,17 @@ private fun parseEnhancedSegmentDrafts(content: String): List<ParsedSegmentDraft
     return segments
 }
 
-private fun parseEslrcDisplayLineDraft(rawLine: String): ParsedDisplayLineDraft? {
-    var content = rawLine
-    val lineStart = parseStructuredTimestampPrefix(content) ?: return null
-    content = content.substring(lineStart.length)
+private fun parseEslrcDisplayLineDraft(
+    rawLine: String,
+    fallbackStartTimeMs: Long? = null,
+): ParsedDisplayLineDraft? {
+    val lineStart = parseStructuredTimestampPrefix(rawLine)
+    val lineStartTimeMs = lineStart?.timeMs ?: fallbackStartTimeMs ?: return null
+    val content = lineStart?.let { rawLine.substring(it.length) } ?: rawLine
     if (content.trim().isEmpty()) return null
 
     val segments = buildList {
-        var currentStartTimeMs = lineStart.timeMs
+        var currentStartTimeMs = lineStartTimeMs
         var remaining = content
         while (remaining.trim().isNotEmpty()) {
             val nextTimestampIndex = remaining.indexOf('[')
@@ -348,7 +345,7 @@ private fun parseEslrcDisplayLineDraft(rawLine: String): ParsedDisplayLineDraft?
     val visibleText = segments.joinToString(separator = "") { it.text }.ifBlank { "..." }
     return ParsedDisplayLineDraft(
         text = visibleText,
-        lineStartTimeMs = lineStart.timeMs,
+        lineStartTimeMs = lineStartTimeMs,
         lineEndTimeMs = segments.last().endTimeMs,
         segments = segments,
         source = ParsedDisplayLineSource.Eslrc,
@@ -396,9 +393,7 @@ private data class ParsedNavidromeStructuredLyricsEntry(
 
 private data class ParsedNavidromeLineDraft(
     val index: Int,
-    val text: String,
-    val startTimeMs: Long?,
-    val segments: List<ParsedSegmentDraft> = emptyList(),
+    val displayLine: ParsedDisplayLineDraft,
 )
 
 private data class ParsedNavidromeCueLineDraft(
@@ -410,13 +405,6 @@ private data class ParsedNavidromeCueLineDraft(
     val agentId: String? = null,
 )
 
-private data class ResolvedNavidromeLineDraft(
-    val text: String,
-    val startTimeMs: Long?,
-    val endTimeMs: Long?,
-    val segments: List<ParsedSegmentDraft>,
-)
-
 private fun parseNavidromeStructuredLyricsEntry(entry: JsonObject): ParsedNavidromeStructuredLyricsEntry? {
     val kind = entry.string("kind")
     val synced = entry.boolean("synced") ?: false
@@ -425,18 +413,25 @@ private fun parseNavidromeStructuredLyricsEntry(entry: JsonObject): ParsedNavidr
         .mapIndexedNotNull { index, line ->
             val rawText = line.string("value")?.trim().orEmpty()
             if (rawText.isBlank()) return@mapIndexedNotNull null
-            val inlineSegments = parseEnhancedSegmentDrafts(rawText).orEmpty()
-            val text = inlineSegments
-                .takeIf { it.isNotEmpty() }
-                ?.joinToString(separator = "") { it.text }
-                ?.ifBlank { "..." }
-                ?: rawText
+            val startTimeMs = if (synced) line.long("start") else null
+            val inlineSegments = parseEnhancedSegmentDrafts(rawText)?.takeIf { it.isNotEmpty() }
+            val displayLine = if (inlineSegments != null) {
+                ParsedDisplayLineDraft(
+                    text = inlineSegments.joinToString(separator = "") { it.text }.ifBlank { "..." },
+                    lineStartTimeMs = startTimeMs ?: inlineSegments.first().startTimeMs,
+                    segments = inlineSegments,
+                    source = ParsedDisplayLineSource.EnhancedInline,
+                )
+            } else {
+                parseEslrcDisplayLineDraft(rawText, fallbackStartTimeMs = startTimeMs)
+                    ?.let { eslrcLine ->
+                        eslrcLine.copy(lineStartTimeMs = startTimeMs ?: eslrcLine.lineStartTimeMs)
+                    }
+                    ?: ParsedDisplayLineDraft(text = rawText, lineStartTimeMs = startTimeMs)
+            }
             ParsedNavidromeLineDraft(
                 index = index,
-                text = text,
-                startTimeMs = (if (synced) line.long("start") else null)
-                    ?: inlineSegments.firstOrNull()?.startTimeMs,
-                segments = inlineSegments,
+                displayLine = displayLine,
             )
         }
     if (lineDrafts.isEmpty()) return null
@@ -463,35 +458,31 @@ private fun parseNavidromeStructuredLyricsEntry(entry: JsonObject): ParsedNavidr
         emptyMap()
     }
 
-    val resolvedLineDrafts = lineDrafts.map { line ->
+    val resolvedDisplayLineDrafts = lineDrafts.map { line ->
         val cueLine = cueLinesByIndex[line.index]
-        ResolvedNavidromeLineDraft(
-            text = cueLine?.text ?: line.text,
-            startTimeMs = cueLine?.startTimeMs ?: line.startTimeMs,
-            endTimeMs = cueLine?.endTimeMs,
-            segments = cueLine?.segments?.takeIf { it.isNotEmpty() } ?: line.segments,
-        )
+        if (cueLine == null) {
+            line.displayLine
+        } else {
+            line.displayLine.copy(
+                text = cueLine.text,
+                lineStartTimeMs = cueLine.startTimeMs ?: line.displayLine.lineStartTimeMs,
+                lineEndTimeMs = cueLine.endTimeMs,
+                segments = cueLine.segments,
+            )
+        }
     }
-    val displayLineDrafts = resolvedLineDrafts.map { line ->
-        ParsedDisplayLineDraft(
-            text = line.text,
-            lineStartTimeMs = line.startTimeMs,
-            lineEndTimeMs = line.endTimeMs,
-            segments = line.segments,
-        )
-    }
+    // Resolve cue indices before merging translations changes the number of display lines.
+    val mergedEntries = mergeAdjacentTranslatedEslrcLines(resolvedDisplayLineDrafts.map { line ->
+        LyricsLine(timestampMs = line.lineStartTimeMs, text = line.text) to line
+    })
+    val displayLines = finalizeDisplayLines(mergedEntries.map { it.second })
     return ParsedNavidromeStructuredLyricsEntry(
         kind = kind,
         synced = synced,
         offsetMs = offsetMs,
-        lines = resolvedLineDrafts.map { line ->
-            LyricsLine(
-                timestampMs = line.startTimeMs,
-                text = line.text,
-            )
-        },
-        displayLines = finalizeDisplayLines(displayLineDrafts),
-        hasEnhancedSegments = displayLineDrafts.any { it.segments.isNotEmpty() },
+        lines = mergedEntries.map { it.first },
+        displayLines = displayLines,
+        hasEnhancedSegments = displayLines.any { it.segments.isNotEmpty() },
     )
 }
 

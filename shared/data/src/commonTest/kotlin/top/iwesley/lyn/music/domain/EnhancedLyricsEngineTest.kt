@@ -214,6 +214,30 @@ class EnhancedLyricsEngineTest {
     }
 
     @Test
+    fun `mixed eslrc sorts timed lines stably with translations and segments aligned`() {
+        val rawLyrics = """
+            说明一
+            [00:03.00]Later [00:03.30]line[00:03.80]
+            [00:01.00]First [00:01.30]line[00:01.80]
+            [00:01.00]第[00:01.00]一[00:01.00]句[00:01.00]
+            [00:03.00]同时间另一句
+            说明二
+        """.trimIndent()
+        val document = assertNotNull(parseCachedLyrics(sourceId = "test-source", rawPayload = rawLyrics))
+        val presentation = assertNotNull(parseEnhancedLyricsPresentation(rawLyrics, document))
+
+        assertEquals(listOf(1_000L, 3_000L, 3_000L, null, null), document.lines.map { it.timestampMs })
+        assertEquals(listOf("First line", "Later line", "同时间另一句", "说明一", "说明二"), document.lines.map { it.text })
+        assertEquals(document.lines.map { it.text }, presentation.lines.map { it.text })
+        assertEquals(document.lines.map { it.timestampMs }, presentation.lines.map { it.lineStartTimeMs })
+        assertEquals(listOf("第一句", null, null, null, null), presentation.lines.map { it.translationText })
+        assertEquals(listOf("First ", "line"), presentation.lines[0].segments.map { it.text })
+        assertEquals(listOf(1_000L, 1_300L), presentation.lines[0].segments.map { it.startTimeMs })
+        assertEquals(listOf("Later ", "line"), presentation.lines[1].segments.map { it.text })
+        assertEquals(listOf(3_000L, 3_300L), presentation.lines[1].segments.map { it.startTimeMs })
+    }
+
+    @Test
     fun `plain text still falls back when no structured lyric syntax exists`() {
         val rawLyrics = "第一句\n第二句"
 
