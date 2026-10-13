@@ -119,6 +119,10 @@ import top.iwesley.lyn.music.core.model.PlaybackLoadToken
 import top.iwesley.lyn.music.core.model.PlaybackPreferencesStore
 import top.iwesley.lyn.music.core.model.PlayerArtworkStyle
 import top.iwesley.lyn.music.core.model.PlayerArtworkStylePreferencesStore
+import top.iwesley.lyn.music.core.model.PlayerLyricsStyle
+import top.iwesley.lyn.music.core.model.PlayerLyricsStylePreferencesStore
+import top.iwesley.lyn.music.core.model.encodePlayerLyricsStyle
+import top.iwesley.lyn.music.core.model.decodePlayerLyricsStyle
 import top.iwesley.lyn.music.core.model.LyricsShareFontPreferencesStore
 import top.iwesley.lyn.music.core.model.JvmAppDataDirectory
 import top.iwesley.lyn.music.core.model.DEFAULT_PLAYBACK_VOLUME
@@ -369,6 +373,7 @@ fun createJvmAppComponent(
             lyricsSharePlatformService = JvmLyricsSharePlatformService(lyricsShareFontLibraryPlatformService),
             lyricsShareFontLibraryPlatformService = lyricsShareFontLibraryPlatformService,
             lyricsShareFontPreferencesStore = appPreferencesStore,
+                playerLyricsStylePreferencesStore = appPreferencesStore,
             systemPlaybackControlsPlatformService = systemPlaybackControls.service,
             menuBarLyricsControlsPlatformService = menuBarLyricsControls.service,
             closeDesktopResources = { resourceGuard.closeAll().getOrThrow() },
@@ -495,7 +500,7 @@ internal class JvmAppPreferencesStore(
 ) : AppLanguagePreferencesStore, PlaybackPreferencesStore, SambaCachePreferencesStore, ThemePreferencesStore,
     CompactPlayerLyricsPreferencesStore, DesktopLyricsPreferencesStore, DesktopLyricsPositionPreferencesStore,
     MenuBarLyricsControlsPreferencesStore,
-    DesktopVlcPreferencesStore, LyricsShareFontPreferencesStore, PlayerArtworkStylePreferencesStore,
+    DesktopVlcPreferencesStore, LyricsShareFontPreferencesStore, PlayerLyricsStylePreferencesStore, PlayerArtworkStylePreferencesStore,
     LibrarySourceFilterPreferencesStore, WindowClosePreferencesStore, AutoOpenPlayerOnStartupPreferencesStore {
     private val propertiesFile = JvmSettingsPropertiesFile(settingsFile)
     private val mutableAppLanguage = MutableStateFlow(appLanguageOrDefault(readNullablePreference(APP_LANGUAGE_PREFERENCE_KEY)))
@@ -544,6 +549,9 @@ internal class JvmAppPreferencesStore(
             autoDetectedPath = mutableDesktopVlcAutoDetectedPath.value,
         ),
     )
+    private val mutablePlayerLyricsStyle = MutableStateFlow(decodePlayerLyricsStyle(readNullablePreference("player_lyrics_style")))
+    override val playerLyricsStyle: StateFlow<PlayerLyricsStyle> = mutablePlayerLyricsStyle.asStateFlow()
+
     private val mutableSelectedLyricsShareFontKey = MutableStateFlow(readSelectedLyricsShareFontKey())
 
     override val useSambaCache: StateFlow<Boolean> = mutableUseSambaCache.asStateFlow()
@@ -766,6 +774,14 @@ internal class JvmAppPreferencesStore(
         mutableDesktopVlcEffectivePath.value = resolveDesktopVlcEffectivePath(
             manualPath = mutableDesktopVlcManualPath.value,
             autoDetectedPath = mutableDesktopVlcAutoDetectedPath.value,
+        )
+    }
+
+    override suspend fun setPlayerLyricsStyle(value: PlayerLyricsStyle) {
+        val normalized = value.normalized()
+        updateProperties(
+            mutate = { setProperty("player_lyrics_style", encodePlayerLyricsStyle(normalized)) },
+            onPersisted = { mutablePlayerLyricsStyle.value = normalized },
         )
     }
 

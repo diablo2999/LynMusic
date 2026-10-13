@@ -139,6 +139,8 @@ internal fun PlayerLyricsPane(
     mobilePlayback: Boolean = false,
 ) {
     val listState = key(track.id) { rememberLazyListState() }
+    val lyricsFont = rememberPlayerLyricsFont(state, onPlayerIntent)
+    val lyricsStyle = state.lyricsStyle
     val lyricsPrimaryTextColor = Color.White
     val lyricsSecondaryTextColor = Color.White.copy(alpha = 0.6f)
     var showTrackInfoDialog by rememberSaveable(track.id, mobilePlayback) { mutableStateOf(false) }
@@ -320,7 +322,7 @@ internal fun PlayerLyricsPane(
                     val browseSeekPositionMs = resolvePlayerLyricsSeekPositionMs(
                         line = visibleLyricsLines.getOrNull(browseTargetIndex ?: -1),
                         lyricsOffsetMs = lyrics.offsetMs,
-                        durationMs = state.snapshot.durationMs,
+                        durationMs = state.effectiveSnapshot.durationMs,
                     )
                     val activeHighlightedVisibleIndex = resolvePlayerLyricsActiveHighlightedIndex(
                         visibleLines = visibleLyricsLines,
@@ -337,7 +339,7 @@ internal fun PlayerLyricsPane(
                     ) {
                         browseTargetTimestampMs
                     } else {
-                        state.snapshot.positionMs + lyrics.offsetMs
+                        state.effectiveSnapshot.positionMs + lyrics.offsetMs
                     }
                     val lyricsMaxWidth = when {
                         compact -> 540.dp
@@ -396,7 +398,7 @@ internal fun PlayerLyricsPane(
                             val animatedScale by animateFloatAsState(targetValue = targetScale)
                             val animatedColor by animateColorAsState(
                                 targetValue = if (index == activeHighlightedVisibleIndex) {
-                                    lyricsPrimaryTextColor
+                                    Color(lyricsStyle.highlightArgb)
                                 } else {
                                     lyricsPrimaryTextColor
                                 },
@@ -421,7 +423,7 @@ internal fun PlayerLyricsPane(
                                             currentPositionMs = activeLyricsPositionMs,
                                             activeColor = animatedColor,
                                             inactiveColor = lyricsSecondaryTextColor.copy(alpha = 0.78f),
-                                            style = MaterialTheme.typography.headlineSmall,
+                                            style = MaterialTheme.typography.headlineSmall.withPlayerLyricsStyle(lyricsStyle, lyricsFont),
                                             textAlign = TextAlign.Center,
                                             fontWeight = FontWeight.Bold,
                                             modifier = Modifier.fillMaxWidth(),
@@ -429,7 +431,7 @@ internal fun PlayerLyricsPane(
                                     } else {
                                         Text(
                                             text = line.text,
-                                            style = if (isHighlighted) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge,
+                                            style = if (isHighlighted) MaterialTheme.typography.headlineSmall.withPlayerLyricsStyle(lyricsStyle, lyricsFont) else MaterialTheme.typography.titleLarge.withPlayerLyricsStyle(lyricsStyle, lyricsFont),
                                             color = animatedColor,
                                             textAlign = TextAlign.Center,
                                             fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Normal,
@@ -438,7 +440,7 @@ internal fun PlayerLyricsPane(
                                     }
                                     Text(
                                         text = translationText,
-                                        style = if (isHighlighted) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge,
+                                        style = if (isHighlighted) MaterialTheme.typography.titleMedium.withPlayerLyricsStyle(lyricsStyle, lyricsFont) else MaterialTheme.typography.bodyLarge.withPlayerLyricsStyle(lyricsStyle, lyricsFont),
                                         color = lyricsSecondaryTextColor.copy(alpha = if (isHighlighted) 0.9f else 0.72f),
                                         textAlign = TextAlign.Center,
                                         fontWeight = FontWeight.Normal,
@@ -451,7 +453,7 @@ internal fun PlayerLyricsPane(
                                     currentPositionMs = activeLyricsPositionMs,
                                     activeColor = animatedColor,
                                     inactiveColor = lyricsSecondaryTextColor.copy(alpha = 0.78f),
-                                    style = MaterialTheme.typography.headlineSmall,
+                                    style = MaterialTheme.typography.headlineSmall.withPlayerLyricsStyle(lyricsStyle, lyricsFont),
                                     textAlign = TextAlign.Center,
                                     fontWeight = FontWeight.Bold,
                                     modifier = lineModifier,
@@ -459,7 +461,7 @@ internal fun PlayerLyricsPane(
                             } else {
                                 Text(
                                     text = line.text,
-                                    style = if (isHighlighted) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge,
+                                    style = if (isHighlighted) MaterialTheme.typography.headlineSmall.withPlayerLyricsStyle(lyricsStyle, lyricsFont) else MaterialTheme.typography.titleLarge.withPlayerLyricsStyle(lyricsStyle, lyricsFont),
                                     color = animatedColor,
                                     textAlign = TextAlign.Center,
                                     fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Normal,

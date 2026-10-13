@@ -1732,6 +1732,48 @@ class LyricsRepositoryManualOverrideTest {
     }
 
     @Test
+    fun `local rescan preserves selected embedded source and invalidates only changed lyrics`() = runTest {
+        val database = createTestDatabase()
+        val track = localTrack()
+        try {
+            database.importSourceDao().upsert(ImportSourceEntity(
+                id = track.sourceId, type = "LOCAL_FOLDER", label = "Local", rootReference = "/music",
+                server = null, shareName = null, directoryPath = null, username = null,
+                credentialKey = null, allowInsecureTls = false, lastScannedAt = null, createdAt = 1,
+            ))
+            database.trackDao().upsertAll(listOf(track.toEntity()))
+            val repository = DefaultLyricsRepository(
+                database, RecordingLyricsHttpClient(), MapCredentialStore(),
+                sameNameLyricsFileGateway = object : SameNameLyricsFileGateway {
+                    override suspend fun readSameNameLyrics(track: Track) = Result.success("[00:01.00]sidecar")
+                },
+            )
+            repository.getLyrics(track)
+            val document = syncedLyricsDocument(EMBEDDED_LYRICS_SOURCE_ID, "selected tags")
+            val applied = repository.applyLyricsCandidate(track.id, top.iwesley.lyn.music.core.model.LyricsSearchCandidate(
+                sourceId = EMBEDDED_LYRICS_SOURCE_ID, sourceName = "Tags", document = document, isTrackProvided = true,
+            ), LyricsSearchApplyMode.LYRICS_ONLY)
+            val version = assertNotNull(applied.version)
+            assertTrue(repository.saveOffset(track, version, 600))
+            suspend fun rescan(raw: String) {
+                val imports = RoomImportSourceRepository(database, FakeImportGateway(localReport = ImportScanReport(tracks = listOf(
+                    ImportedTrackCandidate(title = track.title, mediaLocator = track.mediaLocator,
+                        relativePath = track.relativePath, sizeBytes = 1, modifiedAt = 2, embeddedLyrics = raw),
+                ))), MapCredentialStore())
+                imports.rescanSource(track.sourceId).getOrThrow()
+            }
+            rescan(document.rawPayload)
+            assertEquals(version, repository.getLyrics(track)?.version)
+            assertEquals(600L, repository.readOffset(track, version))
+            rescan("[00:01.00]updated tags")
+            val updated = assertNotNull(repository.getLyrics(track))
+            assertEquals("updated tags", updated.document.lines.single().text)
+            assertEquals(0L, repository.readOffset(track, updated.version))
+            assertFalse(repository.saveOffset(track, version, 900))
+        } finally { database.close() }
+    }
+
+    @Test
     fun `manual lyrics only apply preserves existing artwork override`() = runTest {
         val database = createTestDatabase()
         seedNavidromeSource(database)
@@ -2379,12 +2421,13 @@ private class MapCredentialStore(
 }
 
 private class FakeImportGateway(
-    private val navidromeReport: ImportScanReport,
+    private val navidromeReport: ImportScanReport = ImportScanReport(tracks = emptyList()),
+    private val localReport: ImportScanReport? = null,
 ) : ImportSourceGateway {
     override suspend fun pickLocalFolder(): LocalFolderSelection? = null
 
     override suspend fun scanLocalFolder(selection: LocalFolderSelection, sourceId: String): ImportScanReport {
-        error("Unexpected local scan")
+        return requireNotNull(localReport) { "Unexpected local scan" }
     }
 
     override suspend fun testSamba(draft: SambaSourceDraft) {

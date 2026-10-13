@@ -73,6 +73,7 @@ import kotlin.math.roundToLong
 import top.iwesley.lyn.music.ArtworkDecodeSize
 import top.iwesley.lyn.music.LibraryNavigationTarget
 import top.iwesley.lyn.music.PlayerArtworkDisplay
+import top.iwesley.lyn.music.LyricsStyleButton
 import top.iwesley.lyn.music.PlayerLyricsPane
 import top.iwesley.lyn.music.core.model.AppDisplayScalePreset
 import top.iwesley.lyn.music.core.model.PlaybackSnapshot
@@ -223,6 +224,10 @@ private fun AutomotivePlaybackPane(
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            LyricsStyleButton(
+                                onClick = { onPlayerIntent(PlayerIntent.OpenLyricsStyle) },
+                                modifier = Modifier.size(topControlButtonSize),
+                            )
                             AutomotiveRoundIconButton(
                                 icon = Icons.Rounded.Search,
                                 contentDescription = uiString(Res.string.lyrics_search_action),

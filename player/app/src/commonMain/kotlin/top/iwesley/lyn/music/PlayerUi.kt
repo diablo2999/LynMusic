@@ -53,6 +53,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.Cast
@@ -1318,6 +1319,9 @@ private fun PlayerOverlay(
                     0.dp
                 }
             val wide = layoutProfile.isExpandedLayout
+            if (state.isLyricsStyleVisible) {
+                PlayerLyricsSettingsOverlay(state, mobile = mobilePlayback && !wide, onIntent = onPlayerIntent)
+            }
             val isPureMode = wide && isPureModeRequested
             val useTapToRevealLyrics = layoutProfile.isCompactLayout
             val showPhoneEqualizerEntry = showEqualizerEntry &&
@@ -1397,6 +1401,9 @@ private fun PlayerOverlay(
                                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
+                                    if (!layoutProfile.isAndroidTV) {
+                                        LyricsStyleButton(onClick = { onPlayerIntent(PlayerIntent.OpenLyricsStyle) })
+                                    }
                                     IconButton(
                                         onClick = { onPlayerIntent(PlayerIntent.OpenLyricsShare) },
                                         enabled = state.lyrics != null && !state.isLyricsLoading,
@@ -1441,6 +1448,9 @@ private fun PlayerOverlay(
                                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
+                                    if (!mobilePlayback && !layoutProfile.isAndroidTV) {
+                                        LyricsStyleButton(onClick = { onPlayerIntent(PlayerIntent.OpenLyricsStyle) })
+                                    }
                                     IconButton(
                                         onClick = { onPlayerIntent(PlayerIntent.OpenLyricsShare) },
                                         enabled = state.lyrics != null && !state.isLyricsLoading,
@@ -1614,6 +1624,7 @@ private fun MobilePlayerPrimaryPane(
     onPlayerIntent: (PlayerIntent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val compactLyricsFont = rememberPlayerLyricsFont(state, onPlayerIntent)
     val compactLyricsText = rememberCompactPlayerLyricsText(state)
     val displayCompactLyricsText = compactLyricsText.takeIf {
         shouldShowCompactPlayerLyrics(
@@ -1646,6 +1657,8 @@ private fun MobilePlayerPrimaryPane(
                 modifier = Modifier.fillMaxSize(),
                 compact = true,
                 compactLyricsText = displayCompactLyricsText,
+                compactLyricsStyle = state.lyricsStyle,
+                compactLyricsFont = compactLyricsFont,
                 onPlayerIntent = onPlayerIntent,
             )
         }
@@ -1680,6 +1693,8 @@ private fun PlayerInfoPane(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
     compactLyricsText: String? = null,
+    compactLyricsStyle: top.iwesley.lyn.music.core.model.PlayerLyricsStyle = top.iwesley.lyn.music.core.model.PlayerLyricsStyle(),
+    compactLyricsFont: androidx.compose.ui.text.font.FontFamily? = null,
     onPlayerIntent: ((PlayerIntent) -> Unit)? = null,
 ) {
     BoxWithConstraints(
@@ -1736,8 +1751,8 @@ private fun PlayerInfoPane(
                         .fillMaxWidth()
                         .padding(horizontal = 28.dp)
                         .basicMarquee(),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Color.White.copy(alpha = 0.78f),
+                    style = MaterialTheme.typography.bodyLarge.withPlayerLyricsStyle(compactLyricsStyle, compactLyricsFont),
+                    color = Color(compactLyricsStyle.highlightArgb).copy(alpha = 0.78f),
                     textAlign = TextAlign.Center,
                     maxLines = 1,
                     overflow = TextOverflow.Clip,
@@ -2028,6 +2043,10 @@ private fun PlayerBottomControls(
                 track = track,
                 navigationTargets = navigationTargets,
                 onDismiss = { isMoreSheetVisible = false },
+                onOpenLyricsStyle = {
+                    isMoreSheetVisible = false
+                    onPlayerIntent(PlayerIntent.OpenLyricsStyle)
+                },
                 onOpenAddToPlaylist = {
                     isMoreSheetVisible = false
                     onOpenAddToPlaylist()
@@ -2316,6 +2335,7 @@ private fun CompactPlayerMoreSheet(
     castState: CastSessionState,
     castMessage: String?,
     onDismiss: () -> Unit,
+    onOpenLyricsStyle: () -> Unit,
     onOpenAddToPlaylist: () -> Unit,
     showOfflineDownload: Boolean,
     offlineDownloadStatus: String,
@@ -2393,6 +2413,13 @@ private fun CompactPlayerMoreSheet(
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                )
+                CompactPlayerMoreSheetRow(
+                    icon = Icons.Rounded.Palette,
+                    title = uiString(Res.string.player_lyrics_style),
+                    value = "${uiString(Res.string.player_lyrics_highlight)} · ${uiString(Res.string.player_lyrics_size)} · ${uiString(Res.string.player_lyrics_font)}",
+                    enabled = true,
+                    onClick = onOpenLyricsStyle,
                 )
                 currentPlaybackAudioQuality?.let { qualityText ->
                     CompactPlayerMoreSheetRow(

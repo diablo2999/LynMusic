@@ -1,7 +1,6 @@
 package top.iwesley.lyn.music.platform
 
 import android.graphics.Typeface
-import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import java.io.File
 import top.iwesley.lyn.music.core.model.parseLyricsShareImportedFontHash
@@ -15,7 +14,8 @@ actual fun lyricsSharePreviewFontFamily(
     if (normalizedFontFilePath != null) {
         return runCatching {
             val file = File(normalizedFontFilePath)
-            if (file.isFile) FontFamily(Font(file)) else null
+            // Decode eagerly so a corrupt imported font can fall back before text layout.
+            if (file.isFile) FontFamily(Typeface.createFromFile(file)) else null
         }.getOrNull()
     }
     if (fontKey?.let(::parseLyricsShareImportedFontHash) != null) return null

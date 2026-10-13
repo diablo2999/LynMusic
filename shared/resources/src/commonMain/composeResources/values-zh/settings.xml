@@ -64,7 +64,7 @@
     <string name="cast_background_troubleshooting_title">后台投屏失败，怎么解决</string>
     <string name="cast_background_suspension_hint">投屏时如果应用退到后台后无法自动投下一首，通常是系统冻结了后台运行。</string>
     <string name="font_import_action">导入字体</string>
-    <string name="font_import_description">导入 .ttf / .otf 字体后，可在歌词分享页里直接选择并参与最终出图。</string>
+    <string name="font_import_description">导入 .ttf / .otf 字体后，可在播放歌词和歌词分享中选择使用。</string>
     <string name="font_importing_progress">导入中...</string>
     <string name="playback_ffmpeg_decoder_hint">用于提升部分 Android 设备的音频格式兼容性，切换后下一首歌生效。</string>
     <string name="display_scale_large">大号</string>

@@ -1,6 +1,7 @@
 package top.iwesley.lyn.music.data.db
 
 import androidx.room.ConstructedBy
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -262,6 +263,15 @@ data class LyricsCacheEntity(
     val rawPayload: String,
     val updatedAt: Long,
     val artworkLocator: String? = null,
+    val originalSourceId: String? = null,
+    @ColumnInfo(defaultValue = "0") val selectedForPlayback: Boolean = false,
+)
+
+@Entity(tableName = "lyrics_offset")
+data class LyricsOffsetEntity(
+    @PrimaryKey val trackId: String,
+    val lyricsVersion: String,
+    val offsetMs: Long,
 )
 
 @Entity(
@@ -750,6 +760,12 @@ interface LyricsCacheDao {
     @Query("SELECT * FROM lyrics_cache WHERE trackId = :trackId AND sourceId = :sourceId LIMIT 1")
     suspend fun getByTrackIdAndSourceId(trackId: String, sourceId: String): LyricsCacheEntity?
 
+    @Query("UPDATE lyrics_cache SET selectedForPlayback = 0 WHERE trackId = :trackId AND selectedForPlayback = 1")
+    suspend fun clearPlaybackSelection(trackId: String)
+
+    @Query("SELECT trackId FROM lyrics_cache WHERE trackId LIKE :prefix AND sourceId = :sourceId AND selectedForPlayback = 1")
+    suspend fun getSelectedTrackIds(prefix: String, sourceId: String): List<String>
+
     @Query("SELECT * FROM lyrics_cache WHERE trackId IN (:trackIds) AND sourceId = :sourceId")
     suspend fun getByTrackIdsAndSourceId(trackIds: List<String>, sourceId: String): List<LyricsCacheEntity>
 
@@ -773,6 +789,24 @@ interface LyricsCacheDao {
 
     @Upsert
     suspend fun upsert(item: LyricsCacheEntity)
+}
+
+@Dao
+interface LyricsOffsetDao {
+    @Query("SELECT * FROM lyrics_offset WHERE trackId = :trackId")
+    suspend fun get(trackId: String): LyricsOffsetEntity?
+
+    @Query("SELECT * FROM lyrics_offset WHERE trackId LIKE :prefix")
+    suspend fun getByPrefix(prefix: String): List<LyricsOffsetEntity>
+
+    @Upsert
+    suspend fun upsert(value: LyricsOffsetEntity)
+
+    @Query("DELETE FROM lyrics_offset WHERE trackId = :trackId")
+    suspend fun delete(trackId: String)
+
+    @Query("DELETE FROM lyrics_offset WHERE trackId LIKE :prefix")
+    suspend fun deleteByPrefix(prefix: String)
 }
 
 @Dao
@@ -840,10 +874,11 @@ interface OfflineDownloadDao {
         LyricsSourceConfigEntity::class,
         WorkflowLyricsSourceConfigEntity::class,
         LyricsCacheEntity::class,
+        LyricsOffsetEntity::class,
         OfflineDownloadEntity::class,
         ImportTrackStageEntity::class,
     ],
-    version = 20,
+    version = 21,
 )
 @ConstructedBy(LynMusicDatabaseConstructor::class)
 abstract class LynMusicDatabase : RoomDatabase() {
@@ -864,6 +899,7 @@ abstract class LynMusicDatabase : RoomDatabase() {
     abstract fun lyricsSourceConfigDao(): LyricsSourceConfigDao
     abstract fun workflowLyricsSourceConfigDao(): WorkflowLyricsSourceConfigDao
     abstract fun lyricsCacheDao(): LyricsCacheDao
+    abstract fun lyricsOffsetDao(): LyricsOffsetDao
     abstract fun offlineDownloadDao(): OfflineDownloadDao
 }
 
@@ -895,6 +931,7 @@ fun buildLynMusicDatabase(builder: Builder<LynMusicDatabase>): LynMusicDatabase 
         .addMigrations(MIGRATION_17_18)
         .addMigrations(MIGRATION_18_19)
         .addMigrations(MIGRATION_19_20)
+        .addMigrations(MIGRATION_20_21)
         .build()
 }
 
@@ -1266,5 +1303,13 @@ fun SQLiteConnection.createImportTrackStageTable() {
 private fun SQLiteConnection.execSql(sql: String) {
     prepare(sql).use { statement ->
         statement.step()
+    }
+}
+
+val MIGRATION_20_21: Migration = object : Migration(20, 21) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSql("ALTER TABLE lyrics_cache ADD COLUMN originalSourceId TEXT")
+        connection.execSql("ALTER TABLE lyrics_cache ADD COLUMN selectedForPlayback INTEGER NOT NULL DEFAULT 0")
+        connection.execSql("CREATE TABLE IF NOT EXISTS lyrics_offset (trackId TEXT NOT NULL PRIMARY KEY, lyricsVersion TEXT NOT NULL, offsetMs INTEGER NOT NULL)")
     }
 }

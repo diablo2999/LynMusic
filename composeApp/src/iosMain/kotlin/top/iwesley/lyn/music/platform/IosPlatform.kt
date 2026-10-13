@@ -52,6 +52,10 @@ import top.iwesley.lyn.music.core.model.ImportTrackBatchSink
 import top.iwesley.lyn.music.core.model.LocalFolderSelection
 import top.iwesley.lyn.music.core.model.LyricsHttpClient
 import top.iwesley.lyn.music.core.model.LyricsHttpResponse
+import top.iwesley.lyn.music.core.model.PlayerLyricsStyle
+import top.iwesley.lyn.music.core.model.PlayerLyricsStylePreferencesStore
+import top.iwesley.lyn.music.core.model.encodePlayerLyricsStyle
+import top.iwesley.lyn.music.core.model.decodePlayerLyricsStyle
 import top.iwesley.lyn.music.core.model.LyricsShareFontPreferencesStore
 import top.iwesley.lyn.music.core.model.LyricsRequest
 import top.iwesley.lyn.music.core.model.NavidromeAudioQuality
@@ -221,6 +225,7 @@ fun createIosAppComponent(): top.iwesley.lyn.music.LynMusicAppComponent {
             ),
             playbackPreferencesStore = appPreferencesStore,
             lyricsShareFontPreferencesStore = appPreferencesStore,
+                playerLyricsStylePreferencesStore = appPreferencesStore,
             lyricsSharePlatformService = IosLyricsSharePlatformService(),
             systemPlaybackControlsPlatformService = createIosSystemPlaybackControlsPlatformService(),
         ),
@@ -396,7 +401,7 @@ private class IosKeychainCredentialStore : SecureCredentialStore {
 }
 
 private class IosAppPreferencesStore : AppLanguagePreferencesStore, PlaybackPreferencesStore, SambaCachePreferencesStore, ThemePreferencesStore,
-    CompactPlayerLyricsPreferencesStore, NavidromeAudioQualityPreferencesStore, LyricsShareFontPreferencesStore,
+    CompactPlayerLyricsPreferencesStore, NavidromeAudioQualityPreferencesStore, LyricsShareFontPreferencesStore, PlayerLyricsStylePreferencesStore,
     PlayerArtworkStylePreferencesStore, LibrarySourceFilterPreferencesStore,
     AutoOpenPlayerOnStartupPreferencesStore {
     private val defaults = NSUserDefaults.standardUserDefaults
@@ -458,6 +463,9 @@ private class IosAppPreferencesStore : AppLanguagePreferencesStore, PlaybackPref
     private val mutableCustomThemeTokens = MutableStateFlow(readCustomThemeTokens())
     private val mutableTextPalettePreferences = MutableStateFlow(readTextPalettePreferences())
     private val mutablePlayerArtworkStyle = MutableStateFlow(readPlayerArtworkStyle())
+    private val mutablePlayerLyricsStyle = MutableStateFlow(decodePlayerLyricsStyle(defaults.stringForKey("player_lyrics_style")))
+    override val playerLyricsStyle: StateFlow<PlayerLyricsStyle> = mutablePlayerLyricsStyle.asStateFlow()
+
     private val mutableSelectedLyricsShareFontKey = MutableStateFlow(readSelectedLyricsShareFontKey())
 
     override val useSambaCache: StateFlow<Boolean> = mutableUseSambaCache.asStateFlow()
@@ -522,6 +530,12 @@ private class IosAppPreferencesStore : AppLanguagePreferencesStore, PlaybackPref
     override suspend fun setPlayerArtworkStyle(style: PlayerArtworkStyle) {
         defaults.setObject(style.name, KEY_PLAYER_ARTWORK_STYLE)
         mutablePlayerArtworkStyle.value = style
+    }
+
+    override suspend fun setPlayerLyricsStyle(value: PlayerLyricsStyle) {
+        val normalized = value.normalized()
+        defaults.setObject(encodePlayerLyricsStyle(normalized), "player_lyrics_style")
+        mutablePlayerLyricsStyle.value = normalized
     }
 
     override suspend fun setSelectedLyricsShareFontKey(value: String?) {

@@ -5,6 +5,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.platform.Font
 import androidx.compose.ui.text.platform.SystemFont
 import java.io.File
+import org.jetbrains.skia.FontMgr
 import top.iwesley.lyn.music.core.model.parseLyricsShareImportedFontHash
 
 @OptIn(ExperimentalTextApi::class)
@@ -17,7 +18,10 @@ actual fun lyricsSharePreviewFontFamily(
     if (normalizedFontFilePath != null) {
         return runCatching {
             val file = File(normalizedFontFilePath)
-            if (file.isFile) FontFamily(Font(file)) else null
+            if (!file.isFile) return@runCatching null
+            val decoded = FontMgr.default.makeFromFile(file.absolutePath) ?: return@runCatching null
+            decoded.close()
+            FontFamily(Font(file))
         }.getOrNull()
     }
     if (fontKey?.let(::parseLyricsShareImportedFontHash) != null) return null

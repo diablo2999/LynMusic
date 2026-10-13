@@ -64,7 +64,7 @@
     <string name="cast_background_troubleshooting_title">後台投屏失敗，怎麼解決</string>
     <string name="cast_background_suspension_hint">投屏時如果應用退到後台後無法自動投下一首，通常是系統凍結了後台運行。</string>
     <string name="font_import_action">匯入字體</string>
-    <string name="font_import_description">匯入 .ttf / .otf 字體後，可在歌詞分享頁里直接選擇並參與最終出圖。</string>
+    <string name="font_import_description">匯入 .ttf / .otf 字體後，可在播放歌詞與歌詞分享中選擇使用。</string>
     <string name="font_importing_progress">匯入中...</string>
     <string name="playback_ffmpeg_decoder_hint">用於提升部分 Android 設備的音訊格式兼容性，切換後下一首歌生效。</string>
     <string name="display_scale_large">大號</string>

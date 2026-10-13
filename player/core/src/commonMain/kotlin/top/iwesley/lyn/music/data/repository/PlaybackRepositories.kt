@@ -45,6 +45,8 @@ import top.iwesley.lyn.music.core.model.EqualizerPlatformService
 import top.iwesley.lyn.music.core.model.ImportSourceIndexMode
 import top.iwesley.lyn.music.core.model.LyricsShareFontLibraryPlatformService
 import top.iwesley.lyn.music.core.model.LyricsSharePlatformService
+import top.iwesley.lyn.music.core.model.PlayerLyricsStylePreferencesStore
+import top.iwesley.lyn.music.core.model.InMemoryPlayerLyricsStylePreferencesStore
 import top.iwesley.lyn.music.core.model.LyricsShareFontPreferencesStore
 import top.iwesley.lyn.music.core.model.MenuBarLyricsControlsPlatformService
 import top.iwesley.lyn.music.core.model.NoopDiagnosticLogger
@@ -1154,6 +1156,7 @@ data class PlayerRuntimeServices(
     val lyricsShareFontLibraryPlatformService: LyricsShareFontLibraryPlatformService =
         UnsupportedLyricsShareFontLibraryPlatformService,
     val lyricsShareFontPreferencesStore: LyricsShareFontPreferencesStore = UnsupportedLyricsShareFontPreferencesStore,
+    val playerLyricsStylePreferencesStore: PlayerLyricsStylePreferencesStore = InMemoryPlayerLyricsStylePreferencesStore(),
     val systemPlaybackControlsPlatformService: SystemPlaybackControlsPlatformService = UnsupportedSystemPlaybackControlsPlatformService,
     val menuBarLyricsControlsPlatformService: MenuBarLyricsControlsPlatformService =
         UnsupportedMenuBarLyricsControlsPlatformService,

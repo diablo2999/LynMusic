@@ -16,6 +16,7 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
@@ -23,10 +24,13 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import top.iwesley.lyn.music.core.model.DEFAULT_PLAYBACK_VOLUME
 import top.iwesley.lyn.music.core.model.DiagnosticLogLevel
 import top.iwesley.lyn.music.core.model.DiagnosticLogger
@@ -2486,14 +2490,13 @@ class PlaybackRepositoriesTest {
             database.trackDao().upsertAll(listOf(trackEntity.copy(modifiedAt = 1L)))
             advanceUntilIdle()
 
-            var artworkLocator = repository.snapshot.value.currentTrack?.artworkLocator
-            var refreshAttempts = 0
-            while (artworkLocator != "/tmp/original.jpg" && refreshAttempts < 5) {
-                refreshAttempts += 1
-                advanceUntilIdle()
-                artworkLocator = repository.snapshot.value.currentTrack?.artworkLocator
+            // Room invalidations run outside the virtual test scheduler.
+            val refreshed = withContext(Dispatchers.Default) {
+                withTimeout(5_000) {
+                    repository.snapshot.first { it.currentTrack?.artworkLocator == "/tmp/original.jpg" }
+                }
             }
-            assertEquals("/tmp/original.jpg", artworkLocator)
+            assertEquals("/tmp/original.jpg", refreshed.currentTrack?.artworkLocator)
         } finally {
             repository.close()
             scope.cancel()

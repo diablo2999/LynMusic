@@ -137,11 +137,11 @@ class RoomMusicTagsRepository(
             .firstOrNull { it.sourceId == EMBEDDED_LYRICS_SOURCE_ID }
         when {
             normalizedLyrics == null && existing != null -> {
-                database.lyricsCacheDao().deleteByTrackIdAndSourceId(trackId, EMBEDDED_LYRICS_SOURCE_ID)
+                database.removeLyricsCache(trackId, EMBEDDED_LYRICS_SOURCE_ID)
             }
 
             normalizedLyrics != null && existing == null -> {
-                database.lyricsCacheDao().upsert(
+                database.writeLyricsCache(
                     LyricsCacheEntity(
                         trackId = trackId,
                         sourceId = EMBEDDED_LYRICS_SOURCE_ID,
@@ -152,7 +152,7 @@ class RoomMusicTagsRepository(
             }
 
             normalizedLyrics != null && existing != null && existing.rawPayload != normalizedLyrics -> {
-                database.lyricsCacheDao().upsert(
+                database.writeLyricsCache(
                     LyricsCacheEntity(
                         trackId = trackId,
                         sourceId = EMBEDDED_LYRICS_SOURCE_ID,

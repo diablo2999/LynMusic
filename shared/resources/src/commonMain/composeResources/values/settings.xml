@@ -64,7 +64,7 @@
     <string name="cast_background_troubleshooting_title">How to fix background casting failures</string>
     <string name="cast_background_suspension_hint">If the next song does not cast while the app is in the background, the system may have suspended the app.</string>
     <string name="font_import_action">Import font</string>
-    <string name="font_import_description">Import .ttf or .otf fonts to use them in lyrics sharing images.</string>
+    <string name="font_import_description">Import .ttf or .otf fonts for playback lyrics and lyrics sharing images.</string>
     <string name="font_importing_progress">Importing...</string>
     <string name="playback_ffmpeg_decoder_hint">Improves audio format support on some Android devices. Changes take effect with the next song.</string>
     <string name="display_scale_large">Large</string>

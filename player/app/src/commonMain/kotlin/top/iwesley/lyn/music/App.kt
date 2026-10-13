@@ -206,6 +206,7 @@ fun buildPlayerAppComponent(
         lyricsSharePlatformService = playerRuntimeServices.lyricsSharePlatformService,
         lyricsShareFontLibraryPlatformService = playerRuntimeServices.lyricsShareFontLibraryPlatformService,
         lyricsShareFontPreferencesStore = playerRuntimeServices.lyricsShareFontPreferencesStore,
+        playerLyricsStylePreferencesStore = playerRuntimeServices.playerLyricsStylePreferencesStore,
         artworkCacheStore = sharedGraph.artworkCacheStore,
         logger = sharedGraph.logger,
     )

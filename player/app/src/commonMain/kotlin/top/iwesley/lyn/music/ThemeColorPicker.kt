@@ -24,6 +24,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -148,7 +149,7 @@ internal fun ThemeColorPickerDialog(
 }
 
 @Composable
-private fun ThemeSaturationValuePanel(
+internal fun ThemeSaturationValuePanel(
     hue: Float,
     saturation: Float,
     value: Float,
@@ -159,8 +160,9 @@ private fun ThemeSaturationValuePanel(
     var panelSize by remember { mutableStateOf(IntSize.Zero) }
     val hueColor = remember(hue) { Color(themePickerHueColorArgb(hue)) }
 
+    val currentOnSelectionChange by rememberUpdatedState(onSelectionChange)
     fun updateSelection(position: Offset) {
-        onSelectionChange(
+        currentOnSelectionChange(
             themePickerPanelSelection(
                 x = position.x,
                 y = position.y,
@@ -221,7 +223,7 @@ private fun ThemeSaturationValuePanel(
 }
 
 @Composable
-private fun ThemeHueSlider(
+internal fun ThemeHueSlider(
     hue: Float,
     onHueChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
@@ -232,10 +234,11 @@ private fun ThemeHueSlider(
         listOf(0f, 60f, 120f, 180f, 240f, 300f, 360f).map { Color(themePickerHueColorArgb(it)) }
     }
 
+    val currentOnHueChange by rememberUpdatedState(onHueChange)
     fun updateHue(x: Float) {
         val width = trackSize.width.toFloat()
         if (width <= 0f) return
-        onHueChange(themePickerHueFromSliderFraction(x / width))
+        currentOnHueChange(themePickerHueFromSliderFraction(x / width))
     }
 
     Canvas(

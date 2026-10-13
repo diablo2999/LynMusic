@@ -1,5 +1,8 @@
 package top.iwesley.lyn.music.feature.player
 
+import top.iwesley.lyn.music.core.model.*
+import top.iwesley.lyn.music.data.repository.LyricsLoadResult
+import top.iwesley.lyn.music.data.repository.ResolvedLyricsResult
 import top.iwesley.lyn.music.core.model.ArtworkWritePolicy
 import top.iwesley.lyn.music.core.model.ArtworkCacheResult
 
@@ -97,6 +100,15 @@ data class PlayerState(
     val isLyricsLoading: Boolean = false,
     val hasLyricsLookupCompleted: Boolean = false,
     val lyrics: LyricsDocument? = null,
+    val originalLyrics: LyricsDocument? = null,
+    val lyricsVersion: String? = null,
+    val lyricsTrackId: String? = null,
+    val lyricsUserOffsetMs: Long = 0L,
+    val lyricsStyle: PlayerLyricsStyle = PlayerLyricsStyle(),
+    val isLyricsStyleVisible: Boolean = false,
+    val availableLyricsFonts: List<LyricsShareFontOption> = emptyList(),
+    val isLyricsFontsLoading: Boolean = false,
+    val lyricsFontPath: String? = null,
     val highlightedLineIndex: Int = -1,
     val isManualLyricsSearchVisible: Boolean = false,
     val manualLyricsTitle: String = "",
@@ -227,6 +239,12 @@ sealed interface PlayerIntent {
         val candidate: WorkflowSongCandidate,
         val mode: LyricsSearchApplyMode = LyricsSearchApplyMode.FULL,
     ) : PlayerIntent
+    data object OpenLyricsStyle : PlayerIntent
+    data object DismissLyricsStyle : PlayerIntent
+    data class LyricsStyleChanged(val style: PlayerLyricsStyle) : PlayerIntent
+    data class LyricsOffsetChanged(val trackId: String, val version: String, val offsetMs: Long) : PlayerIntent
+    data class LyricsFontFailed(val fontKey: String) : PlayerIntent
+    data object LyricsSettingsHandled : PlayerIntent
     data object OpenLyricsShare : PlayerIntent
     data object DismissLyricsShare : PlayerIntent
     data class LyricsShareTemplateChanged(val template: LyricsShareTemplate) : PlayerIntent
@@ -257,12 +275,14 @@ class PlayerStore(
     private val lyricsShareFontLibraryPlatformService: LyricsShareFontLibraryPlatformService =
         UnsupportedLyricsShareFontLibraryPlatformService,
     private val lyricsShareFontPreferencesStore: LyricsShareFontPreferencesStore = UnsupportedLyricsShareFontPreferencesStore,
+    private val playerLyricsStylePreferencesStore: PlayerLyricsStylePreferencesStore = InMemoryPlayerLyricsStylePreferencesStore(),
     private val artworkCacheStore: ArtworkCacheStore = object : ArtworkCacheStore {
         override suspend fun cache(locator: String, cacheKey: String, policy: ArtworkWritePolicy): ArtworkCacheResult? = ArtworkCacheResult(locator, true)
     },
     private val logger: DiagnosticLogger = NoopDiagnosticLogger,
 ) : BaseStore<PlayerState, PlayerIntent, PlayerEffect>(
     initialState = PlayerState(
+        lyricsStyle = playerLyricsStylePreferencesStore.playerLyricsStyle.value,
         supportsLyricsShareFontSelection =
             lyricsShareFontPreferencesStore !== UnsupportedLyricsShareFontPreferencesStore,
     ),
@@ -282,7 +302,24 @@ class PlayerStore(
     private var isStoppingCastExplicitly = false
     private var lastAutoAdvancedEndedTrackId: String? = null
 
+    private val lyricsSettings = PlayerLyricsSettings(
+        storeScope, lyricsRepository, playerLyricsStylePreferencesStore, lyricsShareFontLibraryPlatformService,
+        state = { state.value }, update = { transform -> updateState(transform) },
+    )
+
     init {
+        storeScope.launch {
+            lyricsRepository.changes.collect { change ->
+                val track = state.value.effectiveSnapshot.currentTrack ?: return@collect
+                if (change.trackId != null && change.trackId != track.id) return@collect
+                if (change.contentChanged) {
+                    cancelAutomaticLyricsLoad(resetTracking = true)
+                    syncAutomaticLyricsForEffectiveSnapshot()
+                } else {
+                    lyricsSettings.refreshOffset()
+                }
+            }
+        }
         castSessionForegroundPlatformService.bind(
             CastSessionForegroundCallbacks(
                 togglePlayPause = { togglePlayPause() },
@@ -338,8 +375,27 @@ class PlayerStore(
             }
         }
 
+    override fun reduceStateImmediately(intent: PlayerIntent): PlayerIntent = when (intent) {
+        is PlayerIntent.LyricsStyleChanged -> {
+            lyricsSettings.changeStyle(intent.style)
+            PlayerIntent.LyricsSettingsHandled
+        }
+        is PlayerIntent.LyricsOffsetChanged -> {
+            lyricsSettings.changeOffset(intent.trackId, intent.version, intent.offsetMs)
+            PlayerIntent.LyricsSettingsHandled
+        }
+        else -> intent
+    }
+
     override suspend fun handleIntent(intent: PlayerIntent) {
         when (intent) {
+            PlayerIntent.OpenLyricsStyle -> {
+                updateState { it.copy(isLyricsStyleVisible = true) }
+                lyricsSettings.refreshFonts()
+            }
+            PlayerIntent.DismissLyricsStyle -> updateState { it.copy(isLyricsStyleVisible = false) }
+            is PlayerIntent.LyricsFontFailed -> lyricsSettings.fontFailed(intent.fontKey)
+            PlayerIntent.LyricsSettingsHandled, is PlayerIntent.LyricsStyleChanged, is PlayerIntent.LyricsOffsetChanged -> Unit
             is PlayerIntent.PlayTracks -> playTracks(intent.tracks, intent.startIndex)
             is PlayerIntent.PlayTransientTracks -> playTransientTracks(intent.tracks, intent.startIndex)
             is PlayerIntent.PlayQueueIndex -> playQueueIndex(intent.index)
@@ -376,7 +432,10 @@ class PlayerStore(
             PlayerIntent.DismissLyricsShare -> dismissLyricsShare()
             is PlayerIntent.LyricsShareTemplateChanged -> updateLyricsShareTemplate(intent.template)
             PlayerIntent.RequestLyricsShareFonts -> loadLyricsShareFonts()
-            PlayerIntent.InvalidateLyricsShareFontCache -> invalidateLyricsShareFontCache()
+            PlayerIntent.InvalidateLyricsShareFontCache -> {
+                invalidateLyricsShareFontCache()
+                lyricsSettings.refreshFonts()
+            }
             is PlayerIntent.LyricsShareFontChanged -> updateLyricsShareFont(intent.fontKey)
             is PlayerIntent.ToggleLyricsLineSelection -> toggleLyricsLineSelection(intent.index)
             PlayerIntent.ClearLyricsSelection -> clearLyricsSelection()
@@ -1221,8 +1280,8 @@ class PlayerStore(
         mode: LyricsSearchApplyMode,
     ) {
         if (mode != LyricsSearchApplyMode.LYRICS_ONLY) artworkUpdater.cancel()
-        val track = state.value.snapshot.currentTrack ?: return
-        val snapshot = state.value.snapshot
+        val track = state.value.effectiveSnapshot.currentTrack ?: return
+        val snapshot = state.value.effectiveSnapshot
         val result = runCatching {
             lyricsRepository.applyLyricsCandidate(track.id, candidate, mode)
         }.getOrElse { throwable ->
@@ -1230,7 +1289,13 @@ class PlayerStore(
             updateState { it.copy(message = throwable.uiErrorText(applyFailureMessage(mode))) }
             return
         }
-        val document = result.document ?: state.value.lyrics
+        if (state.value.effectiveSnapshot.currentTrack?.id != track.id) return
+        if (result.document != null) {
+            lyricsSettings.accept(track, ResolvedLyricsResult(requireNotNull(result.document), result.artworkLocator, requireNotNull(result.version))) {
+                state.value.effectiveSnapshot.currentTrack?.id == track.id
+            }
+        }
+        val document = state.value.lyrics
         val artworkLocator = result.artworkLocator
         if (mode != LyricsSearchApplyMode.LYRICS_ONLY && !artworkLocator.isNullOrBlank()) {
             logger.debug(PLAYER_LOG_TAG) {
@@ -1258,8 +1323,8 @@ class PlayerStore(
         mode: LyricsSearchApplyMode,
     ) {
         if (mode != LyricsSearchApplyMode.LYRICS_ONLY) artworkUpdater.cancel()
-        val track = state.value.snapshot.currentTrack ?: return
-        val snapshot = state.value.snapshot
+        val track = state.value.effectiveSnapshot.currentTrack ?: return
+        val snapshot = state.value.effectiveSnapshot
         val result = runCatching {
             lyricsRepository.applyWorkflowSongCandidate(track.id, candidate, mode)
         }.getOrElse { throwable ->
@@ -1267,7 +1332,13 @@ class PlayerStore(
             updateState { it.copy(message = throwable.uiErrorText(applyFailureMessage(mode))) }
             return
         }
-        val document = result.document ?: state.value.lyrics
+        if (state.value.effectiveSnapshot.currentTrack?.id != track.id) return
+        if (result.document != null) {
+            lyricsSettings.accept(track, ResolvedLyricsResult(requireNotNull(result.document), result.artworkLocator, requireNotNull(result.version))) {
+                state.value.effectiveSnapshot.currentTrack?.id == track.id
+            }
+        }
+        val document = state.value.lyrics
         val artworkLocator = result.artworkLocator
         if (mode != LyricsSearchApplyMode.LYRICS_ONLY && !artworkLocator.isNullOrBlank()) {
             logger.debug(PLAYER_LOG_TAG) {
@@ -1583,33 +1654,23 @@ class PlayerStore(
                 isLyricsLoading = true,
                 hasLyricsLookupCompleted = false,
                 lyrics = null,
+                originalLyrics = null,
+                lyricsVersion = null,
+                lyricsTrackId = null,
+                lyricsUserOffsetMs = 0L,
                 highlightedLineIndex = -1,
             )
         }
         lyricsLoadJob = storeScope.launch {
             previousJob?.cancelAndJoin()
             if (!isLatestLyricsRequest(requestId, track.id, requestKey)) return@launch
-            val result = runCatching { lyricsRepository.getLyrics(lookupTrack) }
-                .onFailure { error ->
-                    if (error is CancellationException) throw error
-                    logger.warn(PLAYER_LOG_TAG) {
-                        "lyrics-load-failed track=${track.id} reason=${error.message.orEmpty()}"
-                    }
-                }
-                .getOrNull()
+            val outcome = lyricsRepository.loadPlaybackLyrics(lookupTrack)
             if (!isActive || !isLatestLyricsRequest(requestId, track.id, requestKey)) return@launch
-            val lyrics = result?.document
-            updateState { latest ->
-                if (!isLatestLyricsRequest(requestId, track.id, requestKey)) {
-                    latest
-                } else {
-                    latest.copy(
-                        isLyricsLoading = false,
-                        hasLyricsLookupCompleted = true,
-                        lyrics = lyrics,
-                        highlightedLineIndex = findHighlightedLine(lyrics, latest.effectiveSnapshot.positionMs),
-                    )
-                }
+            val result = (outcome as? LyricsLoadResult.Found)?.lyrics
+            if (result != null) {
+                lyricsSettings.accept(track, result) { isLatestLyricsRequest(requestId, track.id, requestKey) }
+            } else {
+                updateState { it.copy(isLyricsLoading = false, hasLyricsLookupCompleted = true) }
             }
             artworkUpdater.submit(track, result?.artworkLocator, requestId) {
                 artworkUpdater.generation == artworkGeneration &&

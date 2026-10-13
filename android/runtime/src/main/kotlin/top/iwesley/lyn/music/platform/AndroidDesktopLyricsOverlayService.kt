@@ -56,6 +56,7 @@ import top.iwesley.lyn.music.core.model.calculateDesktopLyricsWindowLocation
 import top.iwesley.lyn.music.core.model.error
 import top.iwesley.lyn.music.core.model.withSecureInMemoryCache
 import top.iwesley.lyn.music.data.repository.DefaultLyricsRepository
+import top.iwesley.lyn.music.data.repository.LyricsLoadResult
 import top.iwesley.lyn.music.data.repository.LyricsRepository
 import top.iwesley.lyn.music.feature.player.findDesktopLyricsHighlightedLine
 import top.iwesley.lyn.music.feature.player.resolveDesktopLyricsOverlayText
@@ -91,6 +92,9 @@ class AndroidDesktopLyricsOverlayService : Service() {
     private var dragStartY = 0
     private var currentLyricsRequestKey: String? = null
     private var currentLyrics: LyricsDocument? = null
+    private var originalLyrics: LyricsDocument? = null
+    private var currentLyricsVersion: String? = null
+    private var lyricsGeneration = 0L
     private var lyricsLoading = false
     private var lyricsLoadJob: Job? = null
     private var latestPlaybackSnapshot: PlaybackSnapshot? = null
@@ -110,6 +114,26 @@ class AndroidDesktopLyricsOverlayService : Service() {
             },
         ) { position -> preferencesStore.setDesktopLyricsPosition(position) }
         lyricsRepository = createServiceLyricsRepository()
+        serviceScope.launch {
+            lyricsRepository.changes.collect { change ->
+                val snapshot = latestPlaybackSnapshot ?: return@collect
+                val track = snapshot.currentTrack ?: return@collect
+                if (change.trackId != null && change.trackId != track.id) return@collect
+                if (change.contentChanged) {
+                    currentLyricsRequestKey = null
+                    updateForSnapshot(snapshot)
+                } else {
+                    val version = currentLyricsVersion ?: return@collect
+                    val original = originalLyrics ?: return@collect
+                    val generation = lyricsGeneration
+                    val offset = lyricsRepository.readOffset(snapshot.toLyricsLookupTrack(), version) ?: return@collect
+                    if (generation == lyricsGeneration && latestPlaybackSnapshot?.currentTrack?.id == track.id) {
+                        currentLyrics = original.copy(offsetMs = original.offsetMs + offset)
+                        latestPlaybackSnapshot?.let(::renderSnapshot)
+                    }
+                }
+            }
+        }
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         serviceScope.launch {
             observeResolvedUiText(displayedDescription) { text, _ ->
@@ -203,17 +227,20 @@ class AndroidDesktopLyricsOverlayService : Service() {
         val requestKey = lookupTrack.lyricsRequestKey()
         if (requestKey != currentLyricsRequestKey) {
             currentLyricsRequestKey = requestKey
+            val generation = ++lyricsGeneration
+            originalLyrics = null
+            currentLyricsVersion = null
             currentLyrics = null
             lyricsLoading = true
             lyricsLoadJob?.cancel()
             lyricsLoadJob = serviceScope.launch {
-                val result = withContext(Dispatchers.IO) {
-                    runCatching { lyricsRepository.getLyrics(lookupTrack) }
-                        .onFailure { if (it is CancellationException) throw it }
-                        .getOrNull()
-                }
-                if (currentLyricsRequestKey != requestKey) return@launch
-                currentLyrics = result?.document
+                val outcome = withContext(Dispatchers.IO) { lyricsRepository.loadPlaybackLyrics(lookupTrack) }
+                val result = (outcome as? LyricsLoadResult.Found)?.lyrics
+                val offset = result?.let { lyricsRepository.readOffset(lookupTrack, it.version) }
+                if (currentLyricsRequestKey != requestKey || generation != lyricsGeneration) return@launch
+                originalLyrics = result?.document.takeIf { offset != null }
+                currentLyricsVersion = result?.version.takeIf { offset != null }
+                currentLyrics = originalLyrics?.let { it.copy(offsetMs = it.offsetMs + (offset ?: 0L)) }
                 lyricsLoading = false
                 latestPlaybackSnapshot?.let(::renderSnapshot)
             }
@@ -623,6 +650,9 @@ class AndroidDesktopLyricsOverlayService : Service() {
     }
 
     private fun clearLyricsState() {
+        lyricsGeneration += 1
+        originalLyrics = null
+        currentLyricsVersion = null
         latestPlaybackSnapshot = null
         lyricsLoadJob?.cancel()
         lyricsLoadJob = null

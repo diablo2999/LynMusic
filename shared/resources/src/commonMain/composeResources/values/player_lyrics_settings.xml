@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_lyrics_style">Lyrics style</string>
+    <string name="player_lyrics_close">Close</string>
+    <string name="player_lyrics_highlight">Highlight color</string>
+    <string name="player_lyrics_custom_color">Custom color</string>
+    <string name="player_lyrics_hide_palette">Hide color picker</string>
+    <string name="player_lyrics_size">Font size</string>
+    <string name="player_lyrics_font">Font</string>
+    <string name="player_lyrics_default_font">Default</string>
+    <string name="player_lyrics_reset_style">Reset style</string>
+    <string name="player_lyrics_offset">This song’s lyric timing</string>
+    <string name="player_lyrics_seconds">Seconds (−30 to +30)</string>
+    <string name="player_lyrics_apply_offset">Apply</string>
+    <string name="player_lyrics_earlier">Earlier 0.1 s</string>
+    <string name="player_lyrics_reset_offset">Reset</string>
+    <string name="player_lyrics_later">Later 0.1 s</string>
+    <string name="player_lyrics_offset_hint">Positive values show lyrics earlier. Only this song; resets when its lyrics change.</string>
+</resources>

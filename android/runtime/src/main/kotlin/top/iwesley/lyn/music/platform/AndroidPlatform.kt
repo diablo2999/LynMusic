@@ -143,6 +143,10 @@ import top.iwesley.lyn.music.core.model.PlaybackLoadToken
 import top.iwesley.lyn.music.core.model.PlaybackPreferencesStore
 import top.iwesley.lyn.music.core.model.PlayerArtworkStyle
 import top.iwesley.lyn.music.core.model.PlayerArtworkStylePreferencesStore
+import top.iwesley.lyn.music.core.model.PlayerLyricsStyle
+import top.iwesley.lyn.music.core.model.PlayerLyricsStylePreferencesStore
+import top.iwesley.lyn.music.core.model.encodePlayerLyricsStyle
+import top.iwesley.lyn.music.core.model.decodePlayerLyricsStyle
 import top.iwesley.lyn.music.core.model.LyricsShareFontPreferencesStore
 import top.iwesley.lyn.music.core.model.RequestMethod
 import top.iwesley.lyn.music.core.model.DEFAULT_PLAYBACK_VOLUME
@@ -503,6 +507,7 @@ private fun createAndroidRuntimeGraph(
                 ),
                 lyricsShareFontLibraryPlatformService = lyricsShareFontLibraryPlatformService,
                 lyricsShareFontPreferencesStore = appPreferencesStore,
+                playerLyricsStylePreferencesStore = appPreferencesStore,
             ),
             ownsDatabase = ownsDatabase,
         )
@@ -713,7 +718,7 @@ internal class AndroidAppPreferencesStore(
 ) : AppLanguagePreferencesStore, PlaybackPreferencesStore, SambaCachePreferencesStore, ThemePreferencesStore, AppDisplayPreferencesStore,
     CompactPlayerLyricsPreferencesStore, DesktopLyricsPreferencesStore, DesktopLyricsPositionPreferencesStore,
     NavidromeAudioQualityPreferencesStore, LibrarySourceFilterPreferencesStore,
-    LyricsShareFontPreferencesStore, PlaybackDecoderPreferencesStore, PlayerArtworkStylePreferencesStore,
+    LyricsShareFontPreferencesStore, PlayerLyricsStylePreferencesStore, PlaybackDecoderPreferencesStore, PlayerArtworkStylePreferencesStore,
     AndroidEqualizerPreferencesStore, AutoOpenPlayerOnStartupPreferencesStore {
     private val preferences: SharedPreferences =
         context.getSharedPreferences("lynmusic.settings", Context.MODE_PRIVATE)
@@ -787,6 +792,9 @@ internal class AndroidAppPreferencesStore(
     private val mutableSelectedTheme = MutableStateFlow(readSelectedTheme())
     private val mutableCustomThemeTokens = MutableStateFlow(readCustomThemeTokens())
     private val mutableTextPalettePreferences = MutableStateFlow(readTextPalettePreferences())
+    private val mutablePlayerLyricsStyle = MutableStateFlow(decodePlayerLyricsStyle(preferences.getString("player_lyrics_style", null)))
+    override val playerLyricsStyle: StateFlow<PlayerLyricsStyle> = mutablePlayerLyricsStyle.asStateFlow()
+
     private val mutableSelectedLyricsShareFontKey = MutableStateFlow(
         preferences.getString(KEY_LYRICS_SHARE_FONT_KEY, null)?.trim()?.takeIf { it.isNotBlank() },
     )
@@ -986,6 +994,12 @@ internal class AndroidAppPreferencesStore(
     override suspend fun setNavidromeMobileAudioQuality(quality: NavidromeAudioQuality) {
         preferences.edit().putString(KEY_NAVIDROME_MOBILE_AUDIO_QUALITY, quality.name).apply()
         mutableNavidromeMobileAudioQuality.value = quality
+    }
+
+    override suspend fun setPlayerLyricsStyle(value: PlayerLyricsStyle) {
+        val normalized = value.normalized()
+        preferences.edit().putString("player_lyrics_style", encodePlayerLyricsStyle(normalized)).apply()
+        mutablePlayerLyricsStyle.value = normalized
     }
 
     override suspend fun setSelectedLyricsShareFontKey(value: String?) {

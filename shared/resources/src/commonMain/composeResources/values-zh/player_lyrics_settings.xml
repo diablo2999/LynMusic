@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_lyrics_style">歌词样式</string>
+    <string name="player_lyrics_close">关闭</string>
+    <string name="player_lyrics_highlight">高亮颜色</string>
+    <string name="player_lyrics_custom_color">自定义颜色</string>
+    <string name="player_lyrics_hide_palette">收起调色板</string>
+    <string name="player_lyrics_size">字体大小</string>
+    <string name="player_lyrics_font">歌词字体</string>
+    <string name="player_lyrics_default_font">默认</string>
+    <string name="player_lyrics_reset_style">恢复默认样式</string>
+    <string name="player_lyrics_offset">当前歌曲时间校准</string>
+    <string name="player_lyrics_seconds">秒（−30 至 +30）</string>
+    <string name="player_lyrics_apply_offset">应用</string>
+    <string name="player_lyrics_earlier">提前 0.1 秒</string>
+    <string name="player_lyrics_reset_offset">归零</string>
+    <string name="player_lyrics_later">延后 0.1 秒</string>
+    <string name="player_lyrics_offset_hint">正值表示歌词提前显示。仅对当前歌曲生效，歌词更新后作废。</string>
+</resources>
