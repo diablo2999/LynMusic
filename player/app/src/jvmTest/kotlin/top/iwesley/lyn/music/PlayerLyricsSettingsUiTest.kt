@@ -1,6 +1,7 @@
 package top.iwesley.lyn.music
 
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.sp
 import kotlin.test.*
@@ -17,12 +18,37 @@ class PlayerLyricsSettingsUiTest {
         } finally { file.delete() }
     }
 
-    @Test fun `seconds parsing rejects partial invalid and out-of-range input`() {
-        assertEquals(100L, parsePlayerLyricsOffsetSeconds("+0.1"))
-        assertEquals(-30000L, parsePlayerLyricsOffsetSeconds("-30"))
-        assertEquals(250L, parsePlayerLyricsOffsetSeconds("0,25"))
-        for (value in listOf("", "-", "+", "NaN", "Infinity", "30.001", "-31", "one")) assertNull(parsePlayerLyricsOffsetSeconds(value), value)
-        for (offset in listOf(-30_000L, -50L, 0L, 125L, 30_000L)) assertEquals(offset, parsePlayerLyricsOffsetSeconds(formatPlayerLyricsOffset(offset)))
+    @Test fun `timing buttons preserve old precision and clamp at both limits`() {
+        assertEquals(100L, stepPlayerLyricsOffset(0, earlier = true))
+        assertEquals(-100L, stepPlayerLyricsOffset(0, earlier = false))
+        assertEquals(225L, stepPlayerLyricsOffset(125, earlier = true))
+        assertEquals(25L, stepPlayerLyricsOffset(125, earlier = false))
+        assertEquals(30_000L, stepPlayerLyricsOffset(29_950, earlier = true))
+        assertEquals(-30_000L, stepPlayerLyricsOffset(-29_950, earlier = false))
+        assertEquals(30_000L, stepPlayerLyricsOffset(30_000, earlier = true))
+        assertEquals(-30_000L, stepPlayerLyricsOffset(-30_000, earlier = false))
+        assertEquals("0", formatPlayerLyricsOffsetMagnitude(0))
+        assertEquals("0.125", formatPlayerLyricsOffsetMagnitude(125))
+        assertEquals("0.05", formatPlayerLyricsOffsetMagnitude(-50))
+        assertEquals("30", formatPlayerLyricsOffsetMagnitude(-30_000))
+    }
+
+    @Test fun `size buttons traverse all five percent steps and stop at limits`() {
+        var value = 0.75f
+        repeat(20) { value = stepPlayerLyricsFontScale(value, increase = true) }
+        assertEquals(1.75f, value)
+        assertEquals(1.75f, stepPlayerLyricsFontScale(value, increase = true))
+        repeat(20) { value = stepPlayerLyricsFontScale(value, increase = false) }
+        assertEquals(0.75f, value)
+        assertEquals(0.75f, stepPlayerLyricsFontScale(value, increase = false))
+        assertEquals(1.2f, stepPlayerLyricsFontScale(1.15f, increase = true))
+    }
+
+    @Test fun `glass aligns windows by screen position and defers unknown coordinates`() {
+        assertEquals(Offset(-25f, -500f), lyricsGlassSourceOffset(Offset(100f, 50f), Offset(125f, 550f)))
+        assertEquals(Offset(-25f, -500f), lyricsGlassSourceOffset(Offset(400f, 350f), Offset(425f, 850f)))
+        assertNull(lyricsGlassSourceOffset(Offset.Unspecified, Offset.Zero))
+        assertNull(lyricsGlassSourceOffset(Offset.Zero, Offset.Unspecified))
     }
 
     @Test fun `font scaling preserves line-height hierarchy and default typography`() {

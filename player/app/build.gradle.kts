@@ -81,6 +81,7 @@ kotlin {
         jvmTest.dependencies {
             implementation(libs.kotlin.testJunit)
             implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.androidx.navigationevent)
         }
     }
 }

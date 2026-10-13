@@ -53,7 +53,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
-import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.FormatPaint
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.Cast
@@ -1226,8 +1226,9 @@ private fun PlayerOverlay(
         targetValue = backgroundPalette?.tertiaryColor ?: Color.Transparent,
         label = "player-background-tertiary",
     )
+    val lyricsSettingsBackdrop = rememberPlayerLyricsBackdrop(state.isLyricsStyleVisible)
     Surface(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().playerLyricsBackdropSource(lyricsSettingsBackdrop),
         color = backgroundBaseColor,
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -1320,7 +1321,7 @@ private fun PlayerOverlay(
                 }
             val wide = layoutProfile.isExpandedLayout
             if (state.isLyricsStyleVisible) {
-                PlayerLyricsSettingsOverlay(state, mobile = mobilePlayback && !wide, onIntent = onPlayerIntent)
+                PlayerLyricsSettingsOverlay(state, mobile = mobilePlayback && !wide, onIntent = onPlayerIntent, backdrop = lyricsSettingsBackdrop)
             }
             val isPureMode = wide && isPureModeRequested
             val useTapToRevealLyrics = layoutProfile.isCompactLayout
@@ -2415,7 +2416,7 @@ private fun CompactPlayerMoreSheet(
                     overflow = TextOverflow.Ellipsis,
                 )
                 CompactPlayerMoreSheetRow(
-                    icon = Icons.Rounded.Palette,
+                    icon = Icons.Rounded.FormatPaint,
                     title = uiString(Res.string.player_lyrics_style),
                     value = "${uiString(Res.string.player_lyrics_highlight)} · ${uiString(Res.string.player_lyrics_size)} · ${uiString(Res.string.player_lyrics_font)}",
                     enabled = true,

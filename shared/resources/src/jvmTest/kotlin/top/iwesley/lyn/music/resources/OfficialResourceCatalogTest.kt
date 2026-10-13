@@ -9,8 +9,8 @@ import kotlin.test.assertTrue
 
 class OfficialResourceCatalogTest {
     @Test fun everyStringAndPluralLoadsAndFormatsInAllLanguages() = runTest {
-        assertEquals(1281, Res.allStringResources.size)
-        assertEquals(43, Res.allPluralStringResources.size)
+        assertEquals(1343, Res.allStringResources.size)
+        assertEquals(45, Res.allPluralStringResources.size)
         val placeholders = Regex("%([1-9][0-9]*)\\$([sd])")
         fun arguments(pattern: String): Array<Any> {
             val slots = placeholders.findAll(pattern).associate { it.groupValues[1].toInt() to it.groupValues[2] }
