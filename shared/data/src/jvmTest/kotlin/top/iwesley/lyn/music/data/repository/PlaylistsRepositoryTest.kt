@@ -1475,6 +1475,7 @@ class PlaylistsRepositoryTest {
         val httpClient = object : LyricsHttpClient {
             override suspend fun request(request: LyricsRequest): Result<LyricsHttpResponse> = runCatching {
                 val data = when {
+                    request.url.endsWith("/access_code_verify") || request.url.endsWith("/sys/config") -> "{}"
                     request.url.contains("password-login") -> """{"userToken":"tok"}"""
                     request.url.contains("/playlist/list") -> """{"list":[{"guid":"p1","name":"Mix","trackCount":3}],"total":1}"""
                     request.url.contains("/track/playlist-detail/list") ->

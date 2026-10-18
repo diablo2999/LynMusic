@@ -59,8 +59,9 @@ data class RemoteSourceEditorState(
     val keepExistingCredential: Boolean = true,
     val fnMusicConnectionMode: FnMusicConnectionMode = FnMusicConnectionMode.ADDRESS,
     val fnMusicId: String = "",
-    /** A new FN Connect access code; blank keeps the saved one. */
+    /** A new server access code; blank keeps the saved one unless explicitly cleared. */
     val fnMusicAccessCode: String = "",
+    val clearFnMusicAccessCode: Boolean = false,
 )
 
 sealed interface PendingLargeNavidromeAction {
@@ -199,6 +200,7 @@ sealed interface ImportIntent {
     data class RemoteSourceFnMusicConnectionModeChanged(val value: FnMusicConnectionMode) : ImportIntent
     data class RemoteSourceFnMusicIdChanged(val value: String) : ImportIntent
     data class RemoteSourceFnMusicAccessCodeChanged(val value: String) : ImportIntent
+    data class RemoteSourceFnMusicClearAccessCodeChanged(val value: Boolean) : ImportIntent
     data class RemoteSourceLabelChanged(val value: String) : ImportIntent
     data class RemoteSourceServerChanged(val value: String) : ImportIntent
     data class RemoteSourcePortChanged(val value: String) : ImportIntent
@@ -901,6 +903,7 @@ class ImportStore(
             is ImportIntent.RemoteSourceFnMusicConnectionModeChanged -> updateEditingSource { it.copy(fnMusicConnectionMode = intent.value) }
             is ImportIntent.RemoteSourceFnMusicIdChanged -> updateEditingSource { it.copy(fnMusicId = intent.value) }
             is ImportIntent.RemoteSourceFnMusicAccessCodeChanged -> updateEditingSource { it.copy(fnMusicAccessCode = intent.value) }
+            is ImportIntent.RemoteSourceFnMusicClearAccessCodeChanged -> updateEditingSource { it.copy(clearFnMusicAccessCode = intent.value) }
             is ImportIntent.RemoteSourceLabelChanged -> updateEditingSource { it.copy(label = intent.value) }
             is ImportIntent.RemoteSourceServerChanged -> updateEditingSourceAndFolders(
                 resetFolders = { it.server != intent.value },
@@ -1265,6 +1268,7 @@ class ImportStore(
         password: String,
         accessCode: String,
         allowBlankPassword: Boolean,
+        clearAccessCode: Boolean = false,
     ): FnMusicSourceDraft? {
         val type = ImportSourceType.FN_MUSIC
         if (connectionMode == FnMusicConnectionMode.ADDRESS && baseUrl.isBlank() && wanBaseUrl.isBlank()) {
@@ -1291,7 +1295,8 @@ class ImportStore(
             fnId = if (connectionMode == FnMusicConnectionMode.FN_CONNECT) fnId else "",
             username = username,
             password = password,
-            accessCode = if (connectionMode == FnMusicConnectionMode.FN_CONNECT) accessCode else "",
+            accessCode = accessCode,
+            clearAccessCode = clearAccessCode,
         )
     }
 
@@ -1307,6 +1312,7 @@ class ImportStore(
             password = editor.password,
             accessCode = editor.fnMusicAccessCode,
             allowBlankPassword = canReuseStoredCredential,
+            clearAccessCode = editor.clearFnMusicAccessCode,
         )
     }
 

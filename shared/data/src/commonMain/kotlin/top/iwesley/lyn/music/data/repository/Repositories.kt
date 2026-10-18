@@ -19,6 +19,9 @@ import androidx.room.immediateTransaction
 import androidx.room.useWriterConnection
 import androidx.sqlite.SQLiteStatement
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.emptyFlow
 import top.iwesley.lyn.music.domain.lyricsVersion
 import kotlinx.coroutines.flow.Flow
@@ -27,6 +30,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlin.random.Random
 import kotlin.time.Clock
 import top.iwesley.lyn.music.core.model.Album
@@ -178,6 +182,8 @@ import top.iwesley.lyn.music.domain.testEachRemoteSourceAddress
 import top.iwesley.lyn.music.domain.requestNavidromeLyrics
 import top.iwesley.lyn.music.domain.requestEmbyLyricsDocument as requestEmbyServerLyricsDocument
 import top.iwesley.lyn.music.domain.RemoteSourceAddressSelector
+import top.iwesley.lyn.music.domain.RemoteSourceAddressKind
+import top.iwesley.lyn.music.domain.RemoteSourceBaseUrl
 import top.iwesley.lyn.music.domain.resolveEmbyDeviceId
 import top.iwesley.lyn.music.domain.resolveNavidromeCoverArtUrl
 import top.iwesley.lyn.music.domain.resolveNavidromeStreamUrl
@@ -1624,13 +1630,41 @@ class RoomImportSourceRepository(
             assertUniqueImportSourceLabel(updatedSource.label, excludingSourceId = existing.id)
             val report = scanFnMusicDraft(sourceId, preparedDraft, progressSink)
             val credentialKey = existing.credentialKey ?: "credential-$sourceId"
-            persistUpdatedCredential(
-                previousCredentialKey = existing.credentialKey,
-                nextCredentialKey = credentialKey,
-                password = preparedDraft.password,
-            )
-            persistFnMusicAccessCode(sourceId, preparedDraft)
-            persistScanWithProgress(updatedSource.copy(credentialKey = credentialKey), report, progressSink)
+            val previousCredentials = listOf(credentialKey, fnMusicAccessCodeCredentialKey(sourceId))
+                .associateWith { secureCredentialStore.get(it) }
+            val savingContext = currentCoroutineContext()
+            // Once SQLite commits, caller cancellation must not restore credentials for the old source.
+            withContext(NonCancellable) {
+                savingContext.ensureActive()
+                val summary = try {
+                    persistUpdatedCredential(
+                        previousCredentialKey = existing.credentialKey,
+                        nextCredentialKey = credentialKey,
+                        password = preparedDraft.password,
+                    )
+                    persistFnMusicAccessCode(sourceId, preparedDraft)
+                    savingContext.ensureActive()
+                    database.immediateWriteTransaction {
+                        val summary = persistScanWithProgress(
+                            updatedSource.copy(credentialKey = credentialKey), report, progressSink, reconcileLyricsOffsets = false,
+                        )
+                        savingContext.ensureActive()
+                        summary
+                    }
+                } catch (failure: Throwable) {
+                    previousCredentials.forEach { (key, value) ->
+                        try {
+                            if (value == null) secureCredentialStore.remove(key) else secureCredentialStore.put(key, value)
+                        } catch (rollbackFailure: Throwable) {
+                            if (rollbackFailure !== failure) failure.addSuppressed(rollbackFailure)
+                        }
+                    }
+                    throw failure
+                }
+                // Publish lyrics changes only after the source transaction commits; later cleanup cannot undo secrets.
+                database.reconcileSourceLyricsOffsets(trackIdPrefix(sourceId))
+                summary
+            }
         }
     }
 
@@ -1643,7 +1677,7 @@ class RoomImportSourceRepository(
                 wanBaseUrl = preparedDraft.wanBaseUrl,
                 normalizeBaseUrl = ::normalizeFnMusicBaseUrl,
             ) { candidate ->
-                gateway.testFnMusic(preparedDraft.copy(baseUrl = candidate.value, wanBaseUrl = ""), deviceId)
+                gateway.testFnMusic(preparedDraft.atFnMusicAddress(candidate), deviceId)
             }
             FnMusicConnectionMode.FN_CONNECT -> gateway.testFnMusic(preparedDraft, deviceId)
         }
@@ -1674,13 +1708,18 @@ class RoomImportSourceRepository(
                 wanBaseUrl = preparedDraft.wanBaseUrl,
                 normalizeBaseUrl = ::normalizeFnMusicBaseUrl,
             ) { candidate ->
-                block(preparedDraft.copy(baseUrl = candidate.value, wanBaseUrl = ""))
+                block(preparedDraft.atFnMusicAddress(candidate))
             }
             FnMusicConnectionMode.FN_CONNECT -> block(preparedDraft)
         }
     }
 
-    /** Fills a blank password/access code from the stored source; an address-mode source never keeps an access code. */
+    private fun FnMusicSourceDraft.atFnMusicAddress(candidate: RemoteSourceBaseUrl): FnMusicSourceDraft = copy(
+        baseUrl = candidate.value.takeIf { candidate.kind == RemoteSourceAddressKind.LAN }.orEmpty(),
+        wanBaseUrl = candidate.value.takeIf { candidate.kind == RemoteSourceAddressKind.WAN }.orEmpty(),
+    )
+
+    /** Access codes belong to the server and are retained independently of account password reuse. */
     private suspend fun FnMusicSourceDraft.withStoredFnMusicSecrets(
         existing: ImportSource,
         keepExistingCredentialWhenBlankPassword: Boolean,
@@ -1692,17 +1731,16 @@ class RoomImportSourceRepository(
         }
         if (resolvedPassword.isBlank()) throw UiTextException(uiText(Res.string.source_credentials_missing, FN_MUSIC_NAME))
         val resolvedAccessCode = when {
-            connectionMode == FnMusicConnectionMode.ADDRESS -> ""
+            clearAccessCode -> ""
             accessCode.isNotBlank() -> accessCode
-            keepExistingCredentialWhenBlankPassword -> secureCredentialStore.get(fnMusicAccessCodeCredentialKey(existing.id)).orEmpty()
-            else -> ""
+            else -> secureCredentialStore.get(fnMusicAccessCodeCredentialKey(existing.id)).orEmpty()
         }
         return copy(password = resolvedPassword, accessCode = resolvedAccessCode)
     }
 
     private suspend fun persistFnMusicAccessCode(sourceId: String, preparedDraft: FnMusicSourceDraft) {
         val key = fnMusicAccessCodeCredentialKey(sourceId)
-        if (preparedDraft.connectionMode == FnMusicConnectionMode.FN_CONNECT && preparedDraft.accessCode.isNotEmpty()) {
+        if (!preparedDraft.clearAccessCode && preparedDraft.accessCode.isNotBlank()) {
             secureCredentialStore.put(key, preparedDraft.accessCode)
         } else {
             secureCredentialStore.remove(key)
@@ -2307,7 +2345,7 @@ class RoomImportSourceRepository(
         }
     }
 
-    private suspend fun persistScan(source: ImportSource, report: ImportScanReport): ImportScanSummary {
+    private suspend fun persistScan(source: ImportSource, report: ImportScanReport, reconcileLyricsOffsets: Boolean = true): ImportScanSummary {
         val scannedAt = now()
         val warningMessage = scanWarningsForStorage(report.warnings)
         val persistedSource = report.refreshedPersistentReference
@@ -2382,7 +2420,7 @@ class RoomImportSourceRepository(
                 importedTrackCount = scannedTrackEntities.size,
                 failures = report.failures,
             )
-        }.also { database.reconcileSourceLyricsOffsets(trackIdPrefix(source.id)) }
+        }.also { if (reconcileLyricsOffsets) database.reconcileSourceLyricsOffsets(trackIdPrefix(source.id)) }
     }
 
     /**
@@ -2416,6 +2454,7 @@ class RoomImportSourceRepository(
         source: ImportSource,
         report: ImportScanReport,
         progressSink: ImportScanProgressSink,
+        reconcileLyricsOffsets: Boolean = true,
     ): ImportScanSummary {
         progressSink.onProgress(
             ImportScanProgress(
@@ -2425,7 +2464,7 @@ class RoomImportSourceRepository(
                 totalTrackCount = report.totalTrackCount,
             ),
         )
-        return persistScan(source, report)
+        return persistScan(source, report, reconcileLyricsOffsets)
     }
 
     private suspend fun rescanNavidromeSource(

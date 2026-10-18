@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.VisualTransformation
 
 @Composable
 internal fun ImeAwareOutlinedTextField(
@@ -31,6 +32,8 @@ internal fun ImeAwareOutlinedTextField(
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     colors: TextFieldColors = OutlinedTextFieldDefaults.colors(),
     resetKey: Any? = null,
+    enabled: Boolean = true,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
 ) {
     var textFieldValueState by remember(resetKey) {
         mutableStateOf(textFieldValueFor(value))
@@ -59,6 +62,8 @@ internal fun ImeAwareOutlinedTextField(
         minLines = minLines,
         maxLines = maxLines,
         readOnly = readOnly,
+        enabled = enabled,
+        visualTransformation = visualTransformation,
         keyboardOptions = keyboardOptions,
         colors = colors,
     )

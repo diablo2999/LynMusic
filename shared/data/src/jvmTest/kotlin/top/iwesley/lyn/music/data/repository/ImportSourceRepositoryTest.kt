@@ -1412,7 +1412,7 @@ class ImportSourceRepositoryTest {
                 wanBaseUrl = "https://music.example.com",
                 username = " demo ",
                 password = "secret",
-                accessCode = "ignored",
+                accessCode = "1234",
             ),
         ).getOrThrow()
 
@@ -1425,7 +1425,8 @@ class ImportSourceRepositoryTest {
         assertEquals("https://music.example.com", stored.wanRootReference)
         assertEquals("demo", stored.username)
         assertEquals("secret", credentials.get("credential-${summary.sourceId}"))
-        assertNull(credentials.get(fnMusicAccessCodeCredentialKey(summary.sourceId)))
+        assertEquals("1234", gateway.fnMusicTestDrafts.single().accessCode)
+        assertEquals("1234", credentials.get(fnMusicAccessCodeCredentialKey(summary.sourceId)))
         val track = database.trackDao().getAll().single()
         assertEquals("track:${summary.sourceId}:fnmusic:Guid-1", track.id)
     }
@@ -1524,23 +1525,85 @@ class ImportSourceRepositoryTest {
     }
 
     @Test
-    fun `switching an FN Music source to server addresses drops the access code`() = runTest {
-        val database = createImportTestDatabase()
-        val gateway = RecordingImportSourceGateway()
-        val credentials = ImportTestSecureCredentialStore()
-        val repository = RoomImportSourceRepository(database = database, gateway = gateway, secureCredentialStore = credentials)
-        val sourceId = repository.addFnMusicSource(
-            FnMusicSourceDraft("NAS", FnMusicConnectionMode.FN_CONNECT, fnId = "mynas", username = "demo", password = "secret", accessCode = "1234"),
-        ).getOrThrow().sourceId
+    fun `switching FN Music connection modes preserves the access code in both directions`() = runTest {
+        for (mode in FnMusicConnectionMode.entries) {
+            val database = createImportTestDatabase()
+            try {
+                val gateway = RecordingImportSourceGateway()
+                val credentials = ImportTestSecureCredentialStore()
+                val repository = RoomImportSourceRepository(database = database, gateway = gateway, secureCredentialStore = credentials)
+                val initial = FnMusicSourceDraft("NAS", mode, baseUrl = "http://10.0.0.2:5666", fnId = "mynas", username = "demo", password = "secret", accessCode = "1234")
+                val sourceId = repository.addFnMusicSource(initial).getOrThrow().sourceId
+                val nextMode = if (mode == FnMusicConnectionMode.ADDRESS) FnMusicConnectionMode.FN_CONNECT else FnMusicConnectionMode.ADDRESS
 
-        repository.updateFnMusicSource(
-            sourceId = sourceId,
-            draft = FnMusicSourceDraft("NAS", FnMusicConnectionMode.ADDRESS, baseUrl = "http://10.0.0.2:5666", username = "demo", password = ""),
-        ).getOrThrow()
+                repository.updateFnMusicSource(sourceId, initial.copy(connectionMode = nextMode, password = "", accessCode = "")).getOrThrow()
 
-        assertEquals("http://10.0.0.2:5666", database.importSourceDao().getById(sourceId)?.rootReference)
-        assertEquals("", gateway.fnMusicScanDrafts.last().accessCode)
-        assertNull(credentials.get(fnMusicAccessCodeCredentialKey(sourceId)))
+                assertEquals(if (nextMode == FnMusicConnectionMode.ADDRESS) "http://10.0.0.2:5666" else "fnconnect://mynas", database.importSourceDao().getById(sourceId)?.rootReference)
+                assertEquals("1234", gateway.fnMusicScanDrafts.last().accessCode)
+                assertEquals("1234", credentials.get(fnMusicAccessCodeCredentialKey(sourceId)))
+            } finally {
+                database.close()
+            }
+        }
+    }
+
+    @Test
+    fun `FN Music access codes are independent of passwords and only committed after successful validation`() = runTest {
+        for (mode in FnMusicConnectionMode.entries) {
+            val database = createImportTestDatabase()
+            try {
+                var scanFailure: Throwable? = null
+                val gateway = RecordingImportSourceGateway(fnMusicScanReportFactory = {
+                    scanFailure?.let { throw it }
+                    ImportScanReport(tracks = emptyList())
+                })
+                val credentials = ImportTestSecureCredentialStore()
+                val repository = RoomImportSourceRepository(database = database, gateway = gateway, secureCredentialStore = credentials)
+                val original = FnMusicSourceDraft("NAS", mode, baseUrl = "http://nas:5666", fnId = "mynas", username = "alice", password = "secret", accessCode = "saved-code")
+                val sourceId = repository.addFnMusicSource(original).getOrThrow().sourceId
+                val key = fnMusicAccessCodeCredentialKey(sourceId)
+                val changedAccount = original.copy(username = "bob", password = "new-password", accessCode = "")
+
+                repository.testUpdatedFnMusicSource(sourceId, changedAccount, keepExistingCredentialWhenBlankPassword = false).getOrThrow()
+                assertEquals("saved-code", gateway.fnMusicTestDrafts.last().accessCode)
+                repository.updateFnMusicSource(sourceId, changedAccount, keepExistingCredentialWhenBlankPassword = false).getOrThrow()
+                assertEquals("saved-code", gateway.fnMusicScanDrafts.last().accessCode)
+                assertEquals("saved-code", credentials.get(key))
+                assertEquals("new-password", credentials.get("credential-$sourceId"))
+
+                val replacement = changedAccount.copy(password = "", accessCode = "replacement")
+                repository.testUpdatedFnMusicSource(sourceId, replacement).getOrThrow()
+                assertEquals("replacement", gateway.fnMusicTestDrafts.last().accessCode)
+                assertEquals("saved-code", credentials.get(key))
+                repository.updateFnMusicSource(sourceId, replacement).getOrThrow()
+                assertEquals("replacement", credentials.get(key))
+                repository.rescanSource(sourceId).getOrThrow()
+                assertEquals("replacement", gateway.fnMusicScanDrafts.last().accessCode)
+
+                val clearing = replacement.copy(accessCode = "ignored-new-code", clearAccessCode = true)
+                repository.testUpdatedFnMusicSource(sourceId, clearing).getOrThrow()
+                assertEquals("", gateway.fnMusicTestDrafts.last().accessCode)
+                assertEquals("replacement", credentials.get(key))
+                for (failure in listOf(IllegalStateException("scan failed"), kotlinx.coroutines.CancellationException("cancelled"))) {
+                    scanFailure = failure
+                    assertTrue(repository.updateFnMusicSource(sourceId, clearing).isFailure)
+                    assertEquals("replacement", credentials.get(key))
+                }
+                scanFailure = null
+                repository.updateFnMusicSource(sourceId, clearing).getOrThrow()
+                assertEquals("", gateway.fnMusicScanDrafts.last().accessCode)
+                assertNull(credentials.get(key))
+                repository.rescanSource(sourceId).getOrThrow()
+                assertEquals("", gateway.fnMusicScanDrafts.last().accessCode)
+
+                repository.updateFnMusicSource(sourceId, replacement).getOrThrow()
+                repository.deleteSource(sourceId).getOrThrow()
+                assertNull(credentials.get(key))
+                assertNull(credentials.get("credential-$sourceId"))
+            } finally {
+                database.close()
+            }
+        }
     }
 
     @Test

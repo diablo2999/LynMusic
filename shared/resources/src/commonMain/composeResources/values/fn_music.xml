@@ -8,10 +8,11 @@
     <string name="fn_music_fn_id_placeholder">e.g. mynas or mynas.5ddd.com</string>
     <string name="fn_music_access_code_label">Access code (optional)</string>
     <string name="fn_music_access_code_keep_hint">Leave blank to keep the saved access code</string>
+    <string name="fn_music_clear_access_code_label">Clear saved access code</string>
     <string name="fn_music_fn_id_summary">FN ID: %1$s</string>
     <string name="fn_music_fn_id_required">Enter the FN ID.</string>
     <string name="fn_music_fn_id_invalid">The FN ID is invalid. Enter the ID or its .5ddd.com address.</string>
-    <string name="fn_music_access_code_invalid">The FN Connect access code is incorrect or required.</string>
+    <string name="fn_music_access_code_invalid">The FN Music access code is incorrect or required.</string>
     <string name="fn_music_unreachable">Unable to connect to FN Music.</string>
     <string name="fn_music_response_invalid">The FN Music response is incomplete or invalid (%1$s).</string>
     <string name="fn_music_server_error">FN Music error: %1$s</string>

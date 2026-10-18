@@ -34,6 +34,7 @@ import top.iwesley.lyn.music.core.model.ImportScanSummary
 import top.iwesley.lyn.music.core.model.ImportSource
 import top.iwesley.lyn.music.core.model.ImportSourceIndexMode
 import top.iwesley.lyn.music.core.model.FnMusicConnectionMode
+import top.iwesley.lyn.music.core.model.FnMusicSourceDraft
 import top.iwesley.lyn.music.core.model.ImportSourceType
 import top.iwesley.lyn.music.core.model.LocalFolderPickerMode
 import top.iwesley.lyn.music.core.model.NavidromeLibraryProbe
@@ -247,6 +248,80 @@ class ImportStoreTest {
         assertEquals("", edited.password)
         assertFalse(edited.keepExistingCredential)
         harness.close()
+    }
+
+    @Test
+    fun `FN Music creator passes access codes through tests and saving in both modes`() = runTest {
+        for (mode in FnMusicConnectionMode.entries) {
+            val repository = FakeImportSourceRepository()
+            val harness = createStore(repository)
+            try {
+                val store = harness.store
+                store.dispatch(ImportIntent.OpenRemoteSourceCreator(ImportSourceType.FN_MUSIC))
+                store.dispatch(ImportIntent.FnMusicBaseUrlChanged("http://nas:5666"))
+                store.dispatch(ImportIntent.FnMusicIdChanged("mynas"))
+                store.dispatch(ImportIntent.FnMusicUsernameChanged("alice"))
+                store.dispatch(ImportIntent.FnMusicPasswordChanged("password"))
+                store.dispatch(ImportIntent.FnMusicAccessCodeChanged("access-code"))
+                store.dispatch(ImportIntent.FnMusicConnectionModeChanged(mode))
+                advanceUntilIdle()
+                store.dispatch(ImportIntent.TestFnMusicSource)
+                advanceUntilIdle()
+                assertEquals("access-code", repository.lastTestFnMusicDraft?.accessCode)
+                assertEquals(mode, repository.lastTestFnMusicDraft?.connectionMode)
+                store.dispatch(ImportIntent.AddFnMusicSource)
+                advanceUntilIdle()
+                assertEquals("access-code", repository.lastAddedFnMusicDraft?.accessCode)
+                assertFalse(assertNotNull(repository.lastAddedFnMusicDraft).clearAccessCode)
+            } finally {
+                harness.close()
+            }
+        }
+    }
+
+    @Test
+    fun `FN Music editor preserves input across mode and clear changes and forwards explicit clearing`() = runTest {
+        val repository = FakeImportSourceRepository(sources = listOf(source(
+            sourceId = "fn-1", type = ImportSourceType.FN_MUSIC, label = "NAS", rootReference = "http://nas:5666",
+            username = "alice", credentialKey = "credential-fn-1",
+        )))
+        val harness = createStore(repository)
+        try {
+            val store = harness.store
+            store.dispatch(ImportIntent.OpenRemoteSourceEditor("fn-1"))
+            advanceUntilIdle()
+            store.dispatch(ImportIntent.RemoteSourceFnMusicAccessCodeChanged("typed-code"))
+            store.dispatch(ImportIntent.RemoteSourceFnMusicIdChanged("mynas"))
+            advanceUntilIdle()
+            for (mode in FnMusicConnectionMode.entries) {
+                store.dispatch(ImportIntent.RemoteSourceFnMusicConnectionModeChanged(mode))
+                for (clear in listOf(true, false)) {
+                    store.dispatch(ImportIntent.RemoteSourceFnMusicClearAccessCodeChanged(clear))
+                    advanceUntilIdle()
+                    val editor = assertNotNull(store.state.value.editingSource)
+                    assertEquals("typed-code", editor.fnMusicAccessCode)
+                    assertEquals(clear, editor.clearFnMusicAccessCode)
+                    store.dispatch(ImportIntent.TestRemoteSource)
+                    advanceUntilIdle()
+                    assertEquals(mode, repository.lastTestFnMusicDraft?.connectionMode)
+                    assertEquals(clear, repository.lastTestFnMusicDraft?.clearAccessCode)
+                    assertEquals("typed-code", repository.lastTestFnMusicDraft?.accessCode)
+                }
+            }
+            store.dispatch(ImportIntent.DismissRemoteSourceEditor)
+            store.dispatch(ImportIntent.OpenRemoteSourceEditor("fn-1"))
+            advanceUntilIdle()
+            assertEquals("", store.state.value.editingSource?.fnMusicAccessCode)
+            assertFalse(assertNotNull(store.state.value.editingSource).clearFnMusicAccessCode)
+            store.dispatch(ImportIntent.RemoteSourceFnMusicClearAccessCodeChanged(true))
+            advanceUntilIdle()
+            store.dispatch(ImportIntent.SaveRemoteSource)
+            advanceUntilIdle()
+            assertTrue(assertNotNull(repository.lastUpdatedFnMusicDraft).clearAccessCode)
+            assertNull(store.state.value.editingSource)
+        } finally {
+            harness.close()
+        }
     }
 
     @Test
@@ -1425,6 +1500,9 @@ private open class FakeImportSourceRepository(
     var lastUpdatedEmbySourceId: String? = null
     var lastUpdatedEmbyDraft: EmbySourceDraft? = null
     var lastUpdatedEmbyKeepExisting: Boolean = false
+    var lastTestFnMusicDraft: FnMusicSourceDraft? = null
+    var lastAddedFnMusicDraft: FnMusicSourceDraft? = null
+    var lastUpdatedFnMusicDraft: FnMusicSourceDraft? = null
     var lastLocalFolderMode: LocalFolderPickerMode? = null
     var lastReauthorizedLocalFolderSourceId: String? = null
     var navidromeProbeResult: Result<NavidromeLibraryProbe> =
@@ -1642,6 +1720,26 @@ private open class FakeImportSourceRepository(
         lastUpdatedEmbyDraft = draft
         lastUpdatedEmbyKeepExisting = keepExistingCredentialWhenBlankPassword
         return pendingResult?.await()?.map { testScanSummary(sourceId) } ?: Result.success(testScanSummary(sourceId))
+    }
+
+    override suspend fun testFnMusicSource(draft: FnMusicSourceDraft): Result<Unit> {
+        lastTestFnMusicDraft = draft
+        return Result.success(Unit)
+    }
+
+    override suspend fun testUpdatedFnMusicSource(sourceId: String, draft: FnMusicSourceDraft, keepExistingCredentialWhenBlankPassword: Boolean): Result<Unit> {
+        lastTestFnMusicDraft = draft
+        return Result.success(Unit)
+    }
+
+    override suspend fun addFnMusicSource(draft: FnMusicSourceDraft, progressSink: ImportScanProgressSink): Result<ImportScanSummary> {
+        lastAddedFnMusicDraft = draft
+        return Result.success(testScanSummary("fn-1"))
+    }
+
+    override suspend fun updateFnMusicSource(sourceId: String, draft: FnMusicSourceDraft, keepExistingCredentialWhenBlankPassword: Boolean, progressSink: ImportScanProgressSink): Result<ImportScanSummary> {
+        lastUpdatedFnMusicDraft = draft
+        return Result.success(testScanSummary(sourceId))
     }
 
     override suspend fun rescanSource(sourceId: String): Result<ImportScanSummary?> {

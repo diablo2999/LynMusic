@@ -174,6 +174,10 @@ fun buildFnMusicApiUrl(baseUrl: String, path: String, query: List<Pair<String, S
 private fun sortedFnMusicQuery(query: List<Pair<String, String>>): List<Pair<String, String>> =
     query.sortedWith(compareBy<Pair<String, String>> { it.first }.thenBy { it.second })
 
+/** The access gateway shares the NAS mount prefix, rather than the music API suffix. */
+internal fun buildFnMusicAccessCodeVerificationUrl(baseUrl: String): String =
+    buildFnMusicApiUrl(baseUrl, "").removeSuffix(FN_MUSIC_API_PREFIX) + "/access_code_verify"
+
 /**
  * The `authx` header value. [signedPath] is the URL path from `/music/api/v1` on (or the whole path when
  * the prefix is absent); [data] is the decoded, sorted query string for GET or the exact body for POST.
@@ -295,7 +299,7 @@ suspend fun resolveFnMusicDeviceId(secureCredentialStore: SecureCredentialStore)
 /** Validates a draft and normalizes its addresses or FN ID. */
 fun prepareFnMusicDraft(draft: FnMusicSourceDraft): FnMusicSourceDraft {
     requireUi(draft.username.isNotBlank()) { uiText(Res.string.server_username_required, FN_MUSIC_NAME) }
-    return when (draft.connectionMode) {
+    val prepared = when (draft.connectionMode) {
         FnMusicConnectionMode.ADDRESS -> {
             val (lan, wan) = normalizeRemoteSourceBaseUrls(
                 sourceType = ImportSourceType.FN_MUSIC,
@@ -313,6 +317,7 @@ fun prepareFnMusicDraft(draft: FnMusicSourceDraft): FnMusicSourceDraft {
             username = draft.username.trim(),
         )
     }
+    return if (prepared.clearAccessCode) prepared.copy(accessCode = "") else prepared
 }
 
 fun FnMusicSourceDraft.toFnMusicConnection(sourceId: String, deviceId: String): FnMusicConnection = FnMusicConnection(
@@ -323,7 +328,7 @@ fun FnMusicSourceDraft.toFnMusicConnection(sourceId: String, deviceId: String): 
     fnId = fnId.takeIf { connectionMode == FnMusicConnectionMode.FN_CONNECT && it.isNotBlank() },
     username = username,
     password = password,
-    accessCode = accessCode.takeIf { it.isNotBlank() },
+    accessCode = accessCode.takeIf { !clearAccessCode && it.isNotBlank() },
     deviceId = deviceId,
 )
 
@@ -349,6 +354,7 @@ internal data class FnMusicRouteCache(val endpoint: FnMusicEndpoint, val network
 internal class FnMusicSession(val identity: String) {
     val loginMutex = Mutex()
     val routeMutex = Mutex()
+    val addressProbeMutex = Mutex()
 
     /** Read without the lock by many threads (players, readers); written under [loginMutex]. */
     @Volatile
@@ -357,9 +363,13 @@ internal class FnMusicSession(val identity: String) {
     /** Read without the lock on the fast path; written under [routeMutex]. */
     @Volatile
     var route: FnMusicRouteCache? = null
+
+    /** Successful address probes, replaced atomically under [addressProbeMutex]. */
+    @Volatile
+    var verifiedAddresses: Map<FnMusicEndpoint, Long> = emptyMap()
 }
 
-/** Process-wide token and FN Connect route cache, keyed by source id and invalidated by any connection change. */
+/** Process-wide token, route and probe cache, invalidated by any connection change. */
 object FnMusicSessions {
     private val mutex = Mutex()
     private val sessions = mutableMapOf<String, FnMusicSession>()
@@ -450,9 +460,10 @@ internal class FnMusicClient(
         return currentToken()
     }
 
-    /** Forgets the cached FN Connect route so the next request resolves it again. */
+    /** Forgets route and address probes so the next API request validates its endpoint again. */
     suspend fun invalidateRoute() {
         session.routeMutex.withLock { session.route = null }
+        session.addressProbeMutex.withLock { session.verifiedAddresses = emptyMap() }
     }
 
     private suspend fun currentToken(): String {
@@ -464,7 +475,10 @@ internal class FnMusicClient(
 
     private suspend fun clearToken(token: String) {
         session.loginMutex.withLock {
-            if (session.token == token) session.token = null
+            if (session.token == token) {
+                session.token = null
+                session.addressProbeMutex.withLock { session.verifiedAddresses = emptyMap() }
+            }
         }
     }
 
@@ -529,13 +543,13 @@ internal class FnMusicClient(
                         lanBaseUrl = connection.lanBaseUrl,
                         wanBaseUrl = connection.wanBaseUrl,
                         normalizeBaseUrl = ::normalizeFnMusicBaseUrl,
-                    ) { candidate -> block(FnMusicEndpoint(candidate.value, candidate.kind)) }
+                    ) { candidate -> block(verifiedAddressEndpoint(candidate)) }
                 } else {
                     val candidates = addressBaseUrls()
                     var lastFailure: Throwable? = null
                     candidates.forEachIndexed { index, candidate ->
                         try {
-                            return block(FnMusicEndpoint(candidate.value, candidate.kind))
+                            return block(verifiedAddressEndpoint(candidate))
                         } catch (throwable: Throwable) {
                             if (throwable is CancellationException) throw throwable
                             lastFailure = throwable
@@ -557,6 +571,19 @@ internal class FnMusicClient(
                     block(connectEndpoint(excluded = { it.baseUrl == endpoint.baseUrl }))
                 }
             }
+        }
+    }
+
+    private suspend fun verifiedAddressEndpoint(candidate: RemoteSourceBaseUrl): FnMusicEndpoint {
+        val endpoint = FnMusicEndpoint(candidate.value, candidate.kind)
+        val networkVersion = addressSelector?.networkVersion() ?: 0L
+        if (session.verifiedAddresses[endpoint] == networkVersion) return endpoint
+        return session.addressProbeMutex.withLock {
+            if (session.verifiedAddresses[endpoint] != networkVersion) {
+                probe(endpoint)
+                session.verifiedAddresses = session.verifiedAddresses.filterValues { it == networkVersion } + (endpoint to networkVersion)
+            }
+            endpoint
         }
     }
 
@@ -633,8 +660,9 @@ internal class FnMusicClient(
     private suspend fun probe(endpoint: FnMusicEndpoint): FnMusicEndpoint {
         val timeout = if (endpoint.kind == RemoteSourceAddressKind.LAN) FN_MUSIC_LOCAL_PROBE_TIMEOUT_MILLIS else FN_MUSIC_REMOTE_PROBE_TIMEOUT_MILLIS
         val headers = requestHeaders(endpoint, token = null, contentType = false)
-        val verifyUrl = endpoint.baseUrl.trimEnd('/') + "/access_code_verify"
+        val verifyUrl = buildFnMusicAccessCodeVerificationUrl(endpoint.baseUrl)
         val verify = httpClient.request(LyricsRequest(RequestMethod.GET, verifyUrl, headers, timeoutMillis = timeout)).getOrElse { throwable ->
+            if (throwable is CancellationException) throw throwable
             throw RemoteSourceRequestException(uiText(Res.string.server_request_failed, FN_MUSIC_NAME, "access_code_verify", throwable.uiErrorDetail()), throwable)
         }
         if (verify.statusCode in setOf(401, 403, 429)) throw FnMusicAccessCodeException()
@@ -645,6 +673,7 @@ internal class FnMusicClient(
         val response = httpClient.request(
             LyricsRequest(RequestMethod.GET, url, headers + ("authx" to fnMusicAuthx(url)), timeoutMillis = timeout),
         ).getOrElse { throwable ->
+            if (throwable is CancellationException) throw throwable
             throw RemoteSourceRequestException(uiText(Res.string.server_request_failed, FN_MUSIC_NAME, "sys/config", throwable.uiErrorDetail()), throwable)
         }
         if (response.statusCode in setOf(401, 403, 429)) throw FnMusicAccessCodeException()

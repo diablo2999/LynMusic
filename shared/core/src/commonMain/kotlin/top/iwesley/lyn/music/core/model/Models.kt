@@ -259,8 +259,10 @@ data class FnMusicSourceDraft(
     val fnId: String = "",
     val username: String,
     val password: String,
-    /** Optional FN Connect access code; blank when none is set. */
+    /** Optional access code for either connection mode; blank keeps the saved code when editing. */
     val accessCode: String = "",
+    /** Explicitly discard the saved access code, taking precedence over [accessCode]. */
+    val clearAccessCode: Boolean = false,
 )
 
 data class ImportedTrackCandidate(

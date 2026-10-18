@@ -117,6 +117,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -3174,7 +3175,7 @@ private fun SubsonicAuthModeSelector(
 
 /** FN Music's connection choice: LAN/WAN server addresses, or an FN ID resolved through FN Connect. */
 @Composable
-private fun FnMusicConnectionFields(
+internal fun FnMusicConnectionFields(
     connectionMode: FnMusicConnectionMode,
     baseUrl: String,
     wanBaseUrl: String,
@@ -3188,6 +3189,8 @@ private fun FnMusicConnectionFields(
     onWanBaseUrlChange: (String) -> Unit,
     onFnIdChange: (String) -> Unit,
     onAccessCodeChange: (String) -> Unit,
+    clearAccessCode: Boolean = false,
+    onClearAccessCodeChange: (Boolean) -> Unit = {},
 ) {
     Text(uiString(Res.string.fn_music_connection_mode_label), fontWeight = FontWeight.Medium)
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -3222,6 +3225,7 @@ private fun FnMusicConnectionFields(
                 onValueChange = onBaseUrlChange,
                 label = { Text(uiString(Res.string.source_lan_address_label)) },
                 placeholder = { Text("http://192.168.1.2:5666") },
+                enabled = enabled,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(18.dp),
                 colors = fieldColors,
@@ -3231,6 +3235,7 @@ private fun FnMusicConnectionFields(
                 onValueChange = onWanBaseUrlChange,
                 label = { Text(uiString(Res.string.source_wan_address_label)) },
                 placeholder = { Text("https://music.example.com") },
+                enabled = enabled,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(18.dp),
                 colors = fieldColors,
@@ -3243,26 +3248,41 @@ private fun FnMusicConnectionFields(
                 onValueChange = onFnIdChange,
                 label = { Text(uiString(Res.string.fn_music_fn_id_label)) },
                 placeholder = { Text(uiString(Res.string.fn_music_fn_id_placeholder)) },
+                enabled = enabled,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(18.dp),
                 colors = fieldColors,
             )
-            ImeAwareOutlinedTextField(
-                value = accessCode,
-                onValueChange = onAccessCodeChange,
-                label = {
-                    Text(
-                        if (isEditing) {
-                            uiString(Res.string.fn_music_access_code_keep_hint)
-                        } else {
-                            uiString(Res.string.fn_music_access_code_label)
-                        },
-                    )
+        }
+    }
+    ImeAwareOutlinedTextField(
+        value = accessCode,
+        onValueChange = onAccessCodeChange,
+        label = {
+            Text(
+                if (isEditing) {
+                    uiString(Res.string.fn_music_access_code_keep_hint)
+                } else {
+                    uiString(Res.string.fn_music_access_code_label)
                 },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
-                colors = fieldColors,
             )
+        },
+        enabled = enabled && !clearAccessCode,
+        singleLine = true,
+        visualTransformation = PasswordVisualTransformation(),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = fieldColors,
+    )
+    if (isEditing) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(uiString(Res.string.fn_music_clear_access_code_label), modifier = Modifier.weight(1f))
+            Switch(checked = clearAccessCode, onCheckedChange = onClearAccessCodeChange, enabled = enabled)
         }
     }
 }
@@ -4051,6 +4071,8 @@ private fun RemoteSourceEditorDialog(
                 onWanBaseUrlChange = { onIntent(ImportIntent.RemoteSourceWanRootUrlChanged(it)) },
                 onFnIdChange = { onIntent(ImportIntent.RemoteSourceFnMusicIdChanged(it)) },
                 onAccessCodeChange = { onIntent(ImportIntent.RemoteSourceFnMusicAccessCodeChanged(it)) },
+                clearAccessCode = state.clearFnMusicAccessCode,
+                onClearAccessCodeChange = { onIntent(ImportIntent.RemoteSourceFnMusicClearAccessCodeChanged(it)) },
             )
 
             ImportSourceType.LOCAL_FOLDER -> Unit

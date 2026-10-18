@@ -144,7 +144,7 @@ class FnMusicEngineTest {
         assertEquals(1, report.failures.size)
         assertEquals(1, report.warnings.size)
 
-        val login = client.requests.first()
+        val login = client.requests.first { it.url.contains("/user/password-login") }
         assertEquals(RequestMethod.POST, login.method)
         assertTrue(login.url.endsWith("/music/api/v1/user/password-login"))
         val loginBody = Json.parseToJsonElement(login.body!!) as JsonObject
@@ -251,7 +251,7 @@ class FnMusicEngineTest {
                     } else {
                         JsonObject(detailTrack + ("audioSpec" to detailAudio))
                     }
-                    val client = RecordingFnHttpClient { request ->
+                    val client = RecordingFnHttpClient(defaultProbes = true) { request ->
                         when {
                             request.url.contains("password-login") -> LyricsHttpResponse(200, """{"code":0,"data":{"userToken":"tok"}}""")
                             request.url.contains("/track/list") -> LyricsHttpResponse(200, """{"code":0,"data":{"list":[$listed],"total":1}}""")
@@ -318,7 +318,7 @@ class FnMusicEngineTest {
 
     @Test
     fun `server error codes surface as failures`() = runTest {
-        val client = RecordingFnHttpClient { request ->
+        val client = RecordingFnHttpClient(defaultProbes = true) { request ->
             if (request.url.contains("password-login")) {
                 LyricsHttpResponse(200, """{"code":10001,"msg":"wrong password"}""")
             } else {
@@ -552,7 +552,7 @@ class FnMusicEngineTest {
 
     @Test
     fun `a write is only resent elsewhere when it certainly never left`() = runTest {
-        fun client(lanFailure: () -> Throwable) = RecordingFnHttpClient { request ->
+        fun client(lanFailure: () -> Throwable) = RecordingFnHttpClient(defaultProbes = true) { request ->
             when {
                 request.url.startsWith("http://192.168.1.2") && !request.url.contains("password-login") -> throw lanFailure()
                 request.url.contains("password-login") -> LyricsHttpResponse(200, """{"code":0,"data":{"userToken":"tok"}}""")
@@ -604,7 +604,7 @@ class FnMusicEngineTest {
     @Test
     fun `a listing that changes mid-walk is walked again instead of failing or missing tracks`() = runTest {
         var walk = 0
-        val client = RecordingFnHttpClient { request ->
+        val client = RecordingFnHttpClient(defaultProbes = true) { request ->
             when {
                 request.url.contains("password-login") -> LyricsHttpResponse(200, """{"code":0,"data":{"userToken":"tok"}}""")
                 request.url.contains("/track/list") -> {
@@ -631,7 +631,7 @@ class FnMusicEngineTest {
     @Test
     fun `a listing that never settles fails after the retries`() = runTest {
         var calls = 0
-        val client = RecordingFnHttpClient { request ->
+        val client = RecordingFnHttpClient(defaultProbes = true) { request ->
             when {
                 request.url.contains("password-login") -> LyricsHttpResponse(200, """{"code":0,"data":{"userToken":"tok"}}""")
                 request.url.contains("/track/list") -> {
@@ -652,7 +652,7 @@ class FnMusicEngineTest {
     @Test
     fun `parallel metadata lookups keep the listing order`() = runTest {
         val tracks = (1..12).map { """{"guid":"g$it","title":"T$it"}""" }
-        val client = RecordingFnHttpClient { request ->
+        val client = RecordingFnHttpClient(defaultProbes = true) { request ->
             when {
                 request.url.contains("password-login") -> LyricsHttpResponse(200, """{"code":0,"data":{"userToken":"tok"}}""")
                 request.url.contains("/track/list") ->
@@ -716,7 +716,7 @@ class FnMusicEngineTest {
     }
 
     private suspend fun assertMetadataPathMapping(listed: String, metadata: String, expectedPath: String) {
-        val client = RecordingFnHttpClient { request ->
+        val client = RecordingFnHttpClient(defaultProbes = true) { request ->
             when {
                 request.url.contains("password-login") -> LyricsHttpResponse(200, """{"code":0,"data":{"userToken":"tok"}}""")
                 request.url.contains("/track/list") -> LyricsHttpResponse(200, """{"code":0,"data":{"list":[$listed],"total":1}}""")
@@ -774,6 +774,7 @@ private class FakeFnMusicServer(
 
     private fun respond(request: LyricsRequest): LyricsHttpResponse {
         val url = request.url
+        fnMusicProbeResponse(request)?.let { return it }
         if (url.contains("/user/password-login")) {
             logins += 1
             return ok("""{"userToken":"token-$logins"}""")
@@ -798,14 +799,21 @@ private class FakeFnMusicServer(
 }
 
 private class RecordingFnHttpClient(
+    private val defaultProbes: Boolean = false,
     private val responder: (LyricsRequest) -> LyricsHttpResponse,
 ) : LyricsHttpClient {
     val requests = mutableListOf<LyricsRequest>()
 
     override suspend fun request(request: LyricsRequest): Result<LyricsHttpResponse> {
         requests += request
-        return runCatching { responder(request) }
+        return runCatching { (if (defaultProbes) fnMusicProbeResponse(request) else null) ?: responder(request) }
     }
+}
+
+private fun fnMusicProbeResponse(request: LyricsRequest): LyricsHttpResponse? = when {
+    request.url.endsWith("/access_code_verify") -> LyricsHttpResponse(204, "")
+    request.url.endsWith("/sys/config") -> LyricsHttpResponse(200, """{"code":0,"data":{}}""")
+    else -> null
 }
 
 private fun LyricsRequest.queryParam(name: String): String? {

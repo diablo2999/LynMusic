@@ -8,10 +8,11 @@
     <string name="fn_music_fn_id_placeholder">例如 mynas 或 mynas.5ddd.com</string>
     <string name="fn_music_access_code_label">存取碼（選填）</string>
     <string name="fn_music_access_code_keep_hint">留空則保留已儲存的存取碼</string>
+    <string name="fn_music_clear_access_code_label">清除已儲存的存取碼</string>
     <string name="fn_music_fn_id_summary">FN ID: %1$s</string>
     <string name="fn_music_fn_id_required">請填寫 FN ID。</string>
     <string name="fn_music_fn_id_invalid">FN ID 無效，請填寫 ID 或其 .5ddd.com 位址。</string>
-    <string name="fn_music_access_code_invalid">FN Connect 存取碼錯誤或需要存取碼。</string>
+    <string name="fn_music_access_code_invalid">飛牛音樂存取碼錯誤或需要存取碼。</string>
     <string name="fn_music_unreachable">無法連線到飛牛音樂。</string>
     <string name="fn_music_response_invalid">飛牛音樂回傳的資料不完整或無效（%1$s）。</string>
     <string name="fn_music_server_error">飛牛音樂錯誤：%1$s</string>
