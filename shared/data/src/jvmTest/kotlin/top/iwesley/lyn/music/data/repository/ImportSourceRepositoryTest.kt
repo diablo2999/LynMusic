@@ -47,6 +47,8 @@ import top.iwesley.lyn.music.core.model.buildEmbySongLocator
 import top.iwesley.lyn.music.core.model.normalizeWebDavRootUrl
 import top.iwesley.lyn.music.data.db.FavoriteTrackEntity
 import top.iwesley.lyn.music.data.db.ImportSourceEntity
+import top.iwesley.lyn.music.data.db.PlaylistEntity
+import top.iwesley.lyn.music.data.db.PlaylistTrackEntity
 import top.iwesley.lyn.music.data.db.TrackEntity
 import top.iwesley.lyn.music.data.db.LynMusicDatabase
 import top.iwesley.lyn.music.data.db.buildLynMusicDatabase
@@ -1426,6 +1428,53 @@ class ImportSourceRepositoryTest {
         assertNull(credentials.get(fnMusicAccessCodeCredentialKey(summary.sourceId)))
         val track = database.trackDao().getAll().single()
         assertEquals("track:${summary.sourceId}:fnmusic:Guid-1", track.id)
+    }
+
+    @Test
+    fun `rescanning FN Music replaces virtual paths while preserving track identity and references`() = runTest {
+        val database = createImportTestDatabase()
+        try {
+            var relativePath = "Artist/Album/画.flac"
+            val gateway = RecordingImportSourceGateway(
+                fnMusicScanReportFactory = { sourceId ->
+                    ImportScanReport(
+                        tracks = listOf(
+                            ImportedTrackCandidate(
+                                title = "画",
+                                mediaLocator = buildFnMusicSongLocator(sourceId, "Guid-1"),
+                                relativePath = relativePath,
+                            ),
+                        ),
+                        discoveredAudioFileCount = 1,
+                    )
+                },
+            )
+            val repository = createRepository(database, gateway)
+            val sourceId = repository.addFnMusicSource(
+                FnMusicSourceDraft("NAS", FnMusicConnectionMode.ADDRESS, baseUrl = "http://nas:5666", username = "demo", password = "secret"),
+            ).getOrThrow().sourceId
+            val original = database.trackDao().getBySourceId(sourceId).single().copy(addedAt = 10L)
+            database.trackDao().upsertAll(listOf(original))
+            val favorite = FavoriteTrackEntity(original.id, sourceId, remoteSongId = "Guid-1", favoritedAt = 11L)
+            val playlistTrack = PlaylistTrackEntity("playlist-1", original.id, sourceId, addedAt = 12L, localOrdinal = 0, remoteOrdinal = null)
+            database.favoriteTrackDao().upsert(favorite)
+            database.playlistDao().upsert(PlaylistEntity("playlist-1", "我的歌单", "我的歌单", createdLocally = true, createdAt = 12L, updatedAt = 12L))
+            database.playlistTrackDao().upsert(playlistTrack)
+
+            relativePath = "vol1/1000/music/G.E.M.邓紫棋-画.flac"
+            val summary = repository.rescanSource(sourceId).getOrThrow()
+
+            val updated = database.trackDao().getBySourceId(sourceId).single()
+            assertEquals(1, summary?.importedTrackCount)
+            assertEquals(relativePath, updated.relativePath)
+            assertEquals(original.id, updated.id)
+            assertEquals(original.mediaLocator, updated.mediaLocator)
+            assertEquals(10L, updated.addedAt)
+            assertEquals(favorite, database.favoriteTrackDao().getByTrackId(original.id))
+            assertEquals(playlistTrack, database.playlistTrackDao().getByPlaylistId("playlist-1").single())
+        } finally {
+            database.close()
+        }
     }
 
     @Test

@@ -1149,12 +1149,17 @@ private suspend fun FnMusicClient.withMetadata(item: JsonObject): JsonObject {
     if (!missingFormat && !item.isFnMusicCue()) return item
     val guid = item.fnGuid() ?: return item
     val metadata = call("track/metadata", "/track/metadata", listOf("guid" to guid)) as? JsonObject ?: return item
-    val merged = when (val track = metadata["track"]) {
-        is JsonObject -> JsonObject(item + track + listOfNotNull((metadata["audioSpec"] as? JsonObject)?.let { "audioSpec" to it }))
-        else -> if (metadata.fnGuid() != null) metadata else item
+    val metadataTrack = metadata["track"] as? JsonObject
+    val merged = when {
+        metadataTrack != null -> JsonObject(item + metadataTrack + listOfNotNull((metadata["audioSpec"] as? JsonObject)?.let { "audioSpec" to it }))
+        metadata.fnGuid() != null -> metadata
+        else -> return item
     }
     if (merged.fnGuid() != guid) throw UiTextException(uiText(Res.string.fn_music_response_invalid, "track/metadata"))
-    return merged
+    // Metadata can replace the whole audio spec without repeating the path from the listing.
+    val path = metadata.fnMusicPath() ?: metadataTrack?.fnMusicPath() ?: item.fnMusicPath() ?: return merged
+    val mergedAudio = (merged["audioSpec"] as? JsonObject).orEmpty()
+    return JsonObject(merged + ("audioSpec" to JsonObject(mergedAudio + ("path" to JsonPrimitive(path)))))
 }
 
 internal fun JsonObject.isFnMusicCue(): Boolean = bool("isCue") || string("cueSheet") != null
@@ -1165,7 +1170,9 @@ internal fun JsonObject.fnMusicExtension(): String? {
         ?.trim()?.trimStart('.')?.lowercase()?.takeIf { it.isNotBlank() }
 }
 
-private fun JsonObject.fnMusicPath(): String? = (this["audioSpec"] as? JsonObject)?.string("path") ?: string("path")
+private fun JsonObject.fnMusicPath(): String? =
+    listOfNotNull((this["audioSpec"] as? JsonObject)?.string("path"), string("path"))
+        .firstNotNullOfOrNull { path -> path.trimStart('/').takeIf { it.isNotBlank() } }
 
 internal fun JsonObject.toFnMusicTrackCandidate(sourceId: String): ImportedTrackCandidate? {
     val guid = fnGuid() ?: return null
@@ -1187,7 +1194,7 @@ internal fun JsonObject.toFnMusicTrackCandidate(sourceId: String): ImportedTrack
         trackNumber = int("trackNo"),
         discNumber = int("discNo"),
         mediaLocator = buildFnMusicSongLocator(sourceId, guid),
-        relativePath = fnMusicRelativePath(artistName, album?.fnName(), title, extension),
+        relativePath = fnMusicPath() ?: fnMusicRelativePath(artistName, album?.fnName(), title, extension),
         artworkLocator = coverId?.let { buildFnMusicCoverLocator(sourceId, it) },
         sizeBytes = audio?.double("size")?.toLong() ?: 0L,
         modifiedAt = updatedAt ?: 0L,

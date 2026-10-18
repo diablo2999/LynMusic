@@ -7,6 +7,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.async
@@ -17,6 +18,9 @@ import top.iwesley.lyn.music.core.model.NetworkConnectionState
 import top.iwesley.lyn.music.core.model.NetworkConnectionType
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import top.iwesley.lyn.music.core.model.FnMusicConnectionMode
 import top.iwesley.lyn.music.core.model.FnMusicSourceDraft
 import top.iwesley.lyn.music.core.model.LyricsHttpClient
@@ -134,6 +138,7 @@ class FnMusicEngineTest {
         assertEquals(buildFnMusicCoverLocator("fnmusic-1", "c1"), first.artworkLocator)
         assertEquals("Artist", first.artistName)
         assertEquals("Album", first.albumTitle)
+        assertEquals("Artist/Album/Song 1.flac", first.relativePath)
         assertEquals(180_000L, first.durationMs)
         assertEquals(3, report.discoveredAudioFileCount)
         assertEquals(1, report.failures.size)
@@ -150,6 +155,157 @@ class FnMusicEngineTest {
         assertTrue(list.headers.getValue("authx").contains("sign="))
         assertEquals("1", list.queryParam("page"))
         assertEquals("100", list.queryParam("size"))
+    }
+
+    @Test
+    fun `scan uses the NAS audio path and original filename without fetching metadata`() = runTest {
+        val client = FakeFnMusicServer(
+            tracks = listOf(
+                """{
+                    "guid":"hua", "title":"画", "path":"/wrong/画.flac",
+                    "artists":[{"name":"G.E.M.邓紫棋"}], "album":{"name":"画"},
+                    "audioSpec":{"path":"/vol1/1000/music/G.E.M.邓紫棋-画.flac","format":"flac","size":13816627}
+                }""",
+            ),
+        )
+
+        val report = scanFnMusicLibrary(addressDraft(), "fnmusic-1", "device", client, setOf("flac"))
+
+        val track = report.tracks.single()
+        assertEquals("vol1/1000/music/G.E.M.邓紫棋-画.flac", track.relativePath)
+        assertEquals("画", track.title)
+        assertEquals("G.E.M.邓紫棋", track.artistName)
+        assertEquals("画", track.albumTitle)
+        assertEquals(13816627L, track.sizeBytes)
+        assertEquals(buildFnMusicSongLocator("fnmusic-1", "hua"), track.mediaLocator)
+        assertTrue(report.failures.isEmpty())
+        assertEquals(0, client.requests.count { it.url.contains("/track/metadata") })
+    }
+
+    @Test
+    fun `unusable audio paths fall back to the top level path then virtual folders`() {
+        val item = Json.parseToJsonElement(trackJson("g1", "Song", "flac")) as JsonObject
+        val audio = item["audioSpec"] as JsonObject
+        for (unusablePath in listOf(null, "", " \t", "/", "///")) {
+            val withAudioPath = item + ("audioSpec" to JsonObject(audio + ("path" to JsonPrimitive(unusablePath))))
+            val withTopLevelPath = JsonObject(withAudioPath + ("path" to JsonPrimitive("/vol1/1000/music/原文件名.flac")))
+            val withoutPath = JsonObject(withAudioPath + ("path" to JsonPrimitive(unusablePath)))
+
+            assertEquals(
+                "vol1/1000/music/原文件名.flac",
+                assertNotNull(withTopLevelPath.toFnMusicTrackCandidate("fnmusic-1")).relativePath,
+            )
+            assertEquals(
+                "Artist/Album/Song.flac",
+                assertNotNull(withoutPath.toFnMusicTrackCandidate("fnmusic-1")).relativePath,
+            )
+        }
+    }
+
+    @Test
+    fun `real path mapping preserves filename characters and infers missing extension`() {
+        val item = buildJsonObject {
+            put("guid", "g1")
+            put("title", "Different title")
+            put("audioSpec", buildJsonObject { put("path", "/vol1/1000/music/ Live /A\\B/原 文件.FLAC") })
+        }
+
+        assertEquals("flac", item.fnMusicExtension())
+        assertEquals(
+            "vol1/1000/music/ Live /A\\B/原 文件.FLAC",
+            assertNotNull(item.toFnMusicTrackCandidate("fnmusic-1")).relativePath,
+        )
+    }
+
+    @Test
+    fun `nested and flat metadata preserve listing paths and prefer valid detail paths`() = runTest {
+        val listedPath = "/vol1/1000/music/原文件名.flac"
+        val updatedPath = "/vol2/music/新文件名.flac"
+        for (nested in listOf(true, false)) {
+            for (audioPath in listOf(true, false)) {
+                for (detailPath in listOf(null, "", " \t", "///", updatedPath)) {
+                    val listed = buildJsonObject {
+                        put("guid", "g1")
+                        put("title", "Song")
+                        if (audioPath) {
+                            put("audioSpec", buildJsonObject { put("path", listedPath) })
+                        } else {
+                            put("path", listedPath)
+                        }
+                    }
+                    val detailTrack = buildJsonObject {
+                        put("guid", "g1")
+                        put("title", "Song")
+                        if (!audioPath && detailPath != null) put("path", detailPath)
+                    }
+                    val detailAudio = buildJsonObject {
+                        put("format", "flac")
+                        put("duration", 180000)
+                        if (audioPath && detailPath != null) put("path", detailPath)
+                    }
+                    val metadata = if (nested) {
+                        buildJsonObject {
+                            put("track", detailTrack)
+                            put("audioSpec", detailAudio)
+                        }
+                    } else {
+                        JsonObject(detailTrack + ("audioSpec" to detailAudio))
+                    }
+                    val client = RecordingFnHttpClient { request ->
+                        when {
+                            request.url.contains("password-login") -> LyricsHttpResponse(200, """{"code":0,"data":{"userToken":"tok"}}""")
+                            request.url.contains("/track/list") -> LyricsHttpResponse(200, """{"code":0,"data":{"list":[$listed],"total":1}}""")
+                            request.url.contains("/track/metadata") -> LyricsHttpResponse(200, """{"code":0,"data":$metadata}""")
+                            else -> error("unexpected ${request.url}")
+                        }
+                    }
+
+                    val report = scanFnMusicLibrary(addressDraft(), "fnmusic-1", "device", client, setOf("flac"))
+
+                    val track = report.tracks.single()
+                    assertEquals(if (detailPath == updatedPath) "vol2/music/新文件名.flac" else "vol1/1000/music/原文件名.flac", track.relativePath)
+                    assertEquals(180000L, track.durationMs)
+                    assertEquals(buildFnMusicSongLocator("fnmusic-1", "g1"), track.mediaLocator)
+                    assertEquals(1, client.requests.count { it.url.contains("/track/metadata") })
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `detail paths override listing paths across audio spec and top level locations`() = runTest {
+        val listedAudioPath = """{"guid":"g1","title":"Song","audioSpec":{"path":"/vol1/music/原文件名.flac"}}"""
+        val listedTopLevelPath = """{"guid":"g1","title":"Song","path":"/vol1/music/原文件名.flac"}"""
+        val detailTrackWithPath = """{"guid":"g1","title":"Song","path":"/vol2/music/详情文件名.flac"}"""
+        val detailTrack = """{"guid":"g1","title":"Song"}"""
+        val detailAudioWithPath = """{"format":"flac","path":"/vol2/music/详情文件名.flac"}"""
+        val cases = listOf(
+            listedAudioPath to """{"track":$detailTrackWithPath,"audioSpec":{"format":"flac"}}""",
+            listedAudioPath to """{"guid":"g1","title":"Song","path":"/vol2/music/详情文件名.flac","audioSpec":{"format":"flac"}}""",
+            listedTopLevelPath to """{"track":$detailTrack,"audioSpec":$detailAudioWithPath}""",
+            listedTopLevelPath to """{"guid":"g1","title":"Song","audioSpec":$detailAudioWithPath}""",
+        )
+
+        for ((listed, metadata) in cases) {
+            assertMetadataPathMapping(listed, metadata, expectedPath = "vol2/music/详情文件名.flac")
+        }
+    }
+
+    @Test
+    fun `nested and flat metadata supply paths missing from the listing`() = runTest {
+        val listed = """{"guid":"g1","title":"Song"}"""
+        val detailTrackWithPath = """{"guid":"g1","title":"Song","path":"/vol1/1000/music/详情文件名.flac"}"""
+        val detailAudioWithPath = """{"format":"flac","path":"/vol1/1000/music/详情文件名.flac"}"""
+        val metadataCases = listOf(
+            """{"track":$detailTrackWithPath,"audioSpec":{"format":"flac"}}""",
+            """{"guid":"g1","title":"Song","path":"/vol1/1000/music/详情文件名.flac","audioSpec":{"format":"flac"}}""",
+            """{"track":$listed,"audioSpec":$detailAudioWithPath}""",
+            """{"guid":"g1","title":"Song","audioSpec":$detailAudioWithPath}""",
+        )
+
+        for (metadata in metadataCases) {
+            assertMetadataPathMapping(listed, metadata, expectedPath = "vol1/1000/music/详情文件名.flac")
+        }
     }
 
     @Test
@@ -557,6 +713,28 @@ class FnMusicEngineTest {
         fnClient.mediaRequests("/track/stream", listOf("guid" to "g1"))
         assertEquals(3, resolutions)
         FnMusicSessions.invalidate("fnmusic-route-test")
+    }
+
+    private suspend fun assertMetadataPathMapping(listed: String, metadata: String, expectedPath: String) {
+        val client = RecordingFnHttpClient { request ->
+            when {
+                request.url.contains("password-login") -> LyricsHttpResponse(200, """{"code":0,"data":{"userToken":"tok"}}""")
+                request.url.contains("/track/list") -> LyricsHttpResponse(200, """{"code":0,"data":{"list":[$listed],"total":1}}""")
+                request.url.contains("/track/metadata") -> LyricsHttpResponse(200, """{"code":0,"data":$metadata}""")
+                else -> error("unexpected ${request.url}")
+            }
+        }
+
+        val report = scanFnMusicLibrary(addressDraft(), "fnmusic-1", "device", client, setOf("flac"))
+
+        val context = "listed=$listed metadata=$metadata"
+        val track = report.tracks.single()
+        assertEquals(expectedPath, track.relativePath, context)
+        assertEquals(buildFnMusicSongLocator("fnmusic-1", "g1"), track.mediaLocator, context)
+        assertTrue(report.failures.isEmpty(), context)
+        assertEquals(1, client.requests.count { it.url.contains("/track/list") }, context)
+        val metadataRequest = client.requests.single { it.url.contains("/track/metadata") }
+        assertEquals("g1", metadataRequest.queryParam("guid"), context)
     }
 
     private fun addressDraft() = FnMusicSourceDraft(
