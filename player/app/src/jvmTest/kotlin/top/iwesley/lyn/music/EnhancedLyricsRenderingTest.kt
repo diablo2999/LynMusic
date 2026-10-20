@@ -1,6 +1,6 @@
 package top.iwesley.lyn.music
 
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Rect
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -61,24 +61,46 @@ class EnhancedLyricsRenderingTest {
     }
 
     @Test
-    fun `annotated string preserves eslrc segment spacing`() {
-        val line = EnhancedLyricsDisplayLine(
-            text = "Test Word",
-            lineStartTimeMs = 1_000L,
-            lineEndTimeMs = 1_800L,
-            segments = listOf(
-                EnhancedLyricsSegment(text = "Test", startTimeMs = 1_000L, endTimeMs = 1_200L),
-                EnhancedLyricsSegment(text = " Word", startTimeMs = 1_200L, endTimeMs = 1_800L),
-            ),
-        )
+    fun `unstarted and completed masks have exact endpoint coverage`() {
+        val rect = Rect(0f, 0f, 100f, 30f)
+        val geometry = listOf(LyricsSegmentGeometry(listOf(LyricsFillFragment(rect, false))))
+        val unstarted = buildLyricsFillMask(geometry, listOf(0f), 14f)
+        assertTrue(unstarted.solidRects.isEmpty())
+        assertTrue(unstarted.edges.isEmpty())
+        val complete = buildLyricsFillMask(geometry, listOf(1f), 14f)
+        assertEquals(listOf(rect), complete.solidRects)
+        assertTrue(complete.edges.isEmpty())
+    }
 
-        val annotated = buildEnhancedLyricsAnnotatedString(
-            line = line,
-            currentPositionMs = 1_300L,
-            activeColor = Color.White,
-            inactiveColor = Color.Black,
+    @Test
+    fun `soft edge is 14px and capped at 60 percent of the fragment width`() {
+        fun mask(width: Float) = buildLyricsFillMask(
+            listOf(LyricsSegmentGeometry(listOf(LyricsFillFragment(Rect(0f, 0f, width, 30f), false)))),
+            listOf(0.5f), 14f,
         )
+        assertEquals(Rect(0f, 0f, 43f, 30f), mask(100f).solidRects.single())
+        assertEquals(Rect(43f, 0f, 57f, 30f), mask(100f).edges.single().rect)
+        assertEquals(Rect(2f, 0f, 8f, 30f), mask(10f).edges.single().rect)
+    }
 
-        assertEquals("Test Word", annotated.text)
+    @Test
+    fun `wrapped fragments consume fill distance in reading order`() {
+        val first = Rect(20f, 0f, 80f, 30f)
+        val second = Rect(0f, 30f, 100f, 60f)
+        val geometry = listOf(LyricsSegmentGeometry(listOf(
+            LyricsFillFragment(first, false), LyricsFillFragment(second, false),
+        )))
+        val mask = buildLyricsFillMask(geometry, listOf(0.5f), 14f)
+        assertEquals(listOf(first, Rect(0f, 30f, 13f, 60f)), mask.solidRects)
+        assertEquals(Rect(13f, 30f, 27f, 60f), mask.edges.single().rect)
+    }
+
+    @Test
+    fun `right to left fragments fill from their right edge`() {
+        val geometry = listOf(LyricsSegmentGeometry(listOf(LyricsFillFragment(Rect(0f, 0f, 100f, 30f), true))))
+        val mask = buildLyricsFillMask(geometry, listOf(0.25f), 14f)
+        assertEquals(listOf(Rect(82f, 0f, 100f, 30f)), mask.solidRects)
+        assertEquals(Rect(68f, 0f, 82f, 30f), mask.edges.single().rect)
+        assertTrue(mask.edges.single().fragment.isRightToLeft)
     }
 }

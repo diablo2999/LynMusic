@@ -178,6 +178,26 @@ internal fun PlayerLyricsPane(
             )
         }
     }
+    val isPlaybackLineVisible by remember(listState, highlightedVisibleIndex) {
+        derivedStateOf {
+            val layout = listState.layoutInfo
+            layout.visibleItemsInfo.any { item ->
+                item.index == highlightedVisibleIndex &&
+                    item.offset < layout.viewportEndOffset &&
+                    item.offset + item.size > layout.viewportStartOffset
+            }
+        }
+    }
+    val fillClock = rememberLyricsPlaybackClock(
+        state = state,
+        track = track,
+        line = visibleLyricsLines.getOrNull(highlightedVisibleIndex)?.enhancedLine,
+        isLineVisible = isPlaybackLineVisible,
+        isBrowsing = isLyricsBrowsing,
+    )
+    val lyricsPosition = remember(fillClock, lyrics?.offsetMs) {
+        { fillClock.positionMs + (lyrics?.offsetMs ?: 0L) }
+    }
     LaunchedEffect(
         track.id,
         lyrics?.isSynced,
@@ -330,17 +350,6 @@ internal fun PlayerLyricsPane(
                         browseTargetIndex = browseTargetIndex,
                         isBrowsing = isLyricsBrowsing,
                     )
-                    val browseTargetTimestampMs =
-                        visibleLyricsLines.getOrNull(browseTargetIndex ?: -1)?.line?.timestampMs
-                    val activeLyricsPositionMs = if (
-                        isLyricsBrowsing &&
-                        browseTargetIndex == activeHighlightedVisibleIndex &&
-                        browseTargetTimestampMs != null
-                    ) {
-                        browseTargetTimestampMs
-                    } else {
-                        state.effectiveSnapshot.positionMs + lyrics.offsetMs
-                    }
                     val lyricsMaxWidth = when {
                         compact -> 540.dp
                         pure -> 600.dp
@@ -407,10 +416,10 @@ internal fun PlayerLyricsPane(
                                     modifier = lineModifier,
                                     verticalArrangement = Arrangement.spacedBy(translationLineSpacing),
                                 ) {
-                                    if (isHighlighted && hasEnhancedSegments) {
+                                    if (isHighlighted && hasEnhancedSegments && !isLyricsBrowsing) {
                                         EnhancedLyricsLineText(
                                             line = enhancedLine,
-                                            currentPositionMs = activeLyricsPositionMs,
+                                            currentPositionMs = lyricsPosition,
                                             activeColor = animatedColor,
                                             inactiveColor = lyricsSecondaryTextColor.copy(alpha = 0.78f),
                                             style = MaterialTheme.typography.headlineSmall.withPlayerLyricsStyle(lyricsStyle, lyricsFont),
@@ -437,10 +446,10 @@ internal fun PlayerLyricsPane(
                                         modifier = Modifier.fillMaxWidth(),
                                     )
                                 }
-                            } else if (isHighlighted && hasEnhancedSegments) {
+                            } else if (isHighlighted && hasEnhancedSegments && !isLyricsBrowsing) {
                                 EnhancedLyricsLineText(
                                     line = enhancedLine,
-                                    currentPositionMs = activeLyricsPositionMs,
+                                    currentPositionMs = lyricsPosition,
                                     activeColor = animatedColor,
                                     inactiveColor = lyricsSecondaryTextColor.copy(alpha = 0.78f),
                                     style = MaterialTheme.typography.headlineSmall.withPlayerLyricsStyle(lyricsStyle, lyricsFont),

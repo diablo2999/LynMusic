@@ -58,6 +58,7 @@ kotlin {
             implementation(libs.compose.material3)
             implementation(libs.compose.ui)
             implementation(libs.compose.uiToolingPreview)
+            implementation(libs.androidx.lifecycle.runtimeCompose)
             implementation(libs.coil.core)
             implementation(libs.coil.compose)
             implementation(libs.coil.network.ktor3)
