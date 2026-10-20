@@ -372,32 +372,23 @@ internal fun PlayerLyricsPane(
                             val translationText = enhancedLine?.translationText
                                 ?.trim()
                                 ?.takeIf { it.isNotEmpty() }
-                            val distance = if (activeHighlightedVisibleIndex >= 0) {
-                                abs(index - activeHighlightedVisibleIndex)
-                            } else {
-                                Int.MAX_VALUE
-                            }
+                            val isHighlighted = index == activeHighlightedVisibleIndex
                             val targetAlpha = when {
                                 pure && activeHighlightedVisibleIndex < 0 -> 0.48f
                                 activeHighlightedVisibleIndex < 0 -> 0.6f
-                                distance == 0 -> 1f
-                                pure && distance == 1 -> 0.58f
-                                distance == 1 -> 0.72f
-                                pure && distance == 2 -> 0.38f
-                                distance == 2 -> 0.5f
-                                pure -> 0.22f
-                                else -> 0.34f
+                                isHighlighted -> 1f
+                                pure -> 0.34f
+                                else -> 0.58f
                             }
                             val targetScale = when {
                                 highlightedVisibleIndex < 0 -> 1f
-                                distance == 0 -> 1.08f
-                                distance == 1 -> 1.01f
+                                isHighlighted -> 1.08f
                                 else -> 1f
                             }
                             val animatedAlpha by animateFloatAsState(targetValue = targetAlpha)
                             val animatedScale by animateFloatAsState(targetValue = targetScale)
                             val animatedColor by animateColorAsState(
-                                targetValue = if (index == activeHighlightedVisibleIndex) {
+                                targetValue = if (isHighlighted) {
                                     Color(lyricsStyle.highlightArgb)
                                 } else {
                                     lyricsPrimaryTextColor
@@ -410,7 +401,6 @@ internal fun PlayerLyricsPane(
                                     scaleX = animatedScale,
                                     scaleY = animatedScale,
                                 )
-                            val isHighlighted = index == activeHighlightedVisibleIndex
                             val hasEnhancedSegments = enhancedLine?.segments?.isNotEmpty() == true
                             if (translationText != null) {
                                 Column(
