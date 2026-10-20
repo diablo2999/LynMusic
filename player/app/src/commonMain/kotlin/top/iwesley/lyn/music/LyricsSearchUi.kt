@@ -916,7 +916,7 @@ internal fun resolveLyricsSearchContentType(document: LyricsDocument): LyricsSea
         parseEnhancedLyricsPresentation(
             rawPayload = document.rawPayload,
             fallbackDocument = document,
-        ) != null -> LyricsSearchContentType.WORD
+        )?.lines?.any { it.segments.isNotEmpty() } == true -> LyricsSearchContentType.WORD
 
         document.isSynced -> LyricsSearchContentType.LINE
         else -> LyricsSearchContentType.PLAIN

@@ -40,7 +40,7 @@ fun parseEnhancedLyricsPresentation(
     fallbackDocument: LyricsDocument,
 ): EnhancedLyricsPresentation? {
     val parsed = parseStructuredLyricsPayload(rawPayload) ?: return null
-    if (!parsed.hasEnhancedSegments) return null
+    if (!parsed.hasEnhancedSegments && parsed.displayLines.none { !it.translationText.isNullOrBlank() }) return null
     if (parsed.lines.size != fallbackDocument.lines.size) return null
     val matchesFallback = parsed.lines.zip(fallbackDocument.lines).all { (parsedLine, fallbackLine) ->
         parsedLine.timestampMs == fallbackLine.timestampMs &&
@@ -55,6 +55,7 @@ fun parseEnhancedLyricsPresentation(
 
 internal fun parseStructuredLyricsPayload(rawPayload: String): ParsedStructuredLyricsPayload? {
     if (rawPayload.isBlank()) return null
+    if (isTtmlLyricsPayload(rawPayload)) return parseTtmlLyricsPayload(rawPayload)
     parseNavidromeStructuredLyricsPayload(rawPayload)?.let { return it }
     val hasStructuredSyntax = rawPayload.lineSequence()
         .map { it.trim() }

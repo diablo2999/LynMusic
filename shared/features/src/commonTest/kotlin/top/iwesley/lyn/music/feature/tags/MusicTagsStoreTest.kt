@@ -512,6 +512,33 @@ class MusicTagsStoreTest {
     }
 
     @Test
+    fun `applying TTML imports line LRC into draft without writing the file`() = runTest {
+        val track = sampleTrack()
+        val repository = FakeMusicTagsRepository(listOf(track), mapOf(track.id to sampleSnapshot()))
+        val ttml = """<tt xmlns:m="urn:metadata"><body><p begin="1s" end="2s"><span begin="1s" end="2s">Hello</span><span m:role="x-translation">你好</span></p></body></tt>"""
+        val candidate = LyricsSearchCandidate(
+            sourceId = "managed-lrcapi",
+            sourceName = "LrcAPI",
+            document = LyricsDocument(
+                lines = listOf(LyricsLine(1_000L, "Hello")),
+                sourceId = "managed-lrcapi",
+                rawPayload = ttml,
+            ),
+        )
+        val store = createStore(repository, testScheduler)
+        advanceUntilIdle()
+        store.dispatch(MusicTagsIntent.OpenOnlineLyricsSearch)
+        advanceUntilIdle()
+        store.dispatch(MusicTagsIntent.ApplyOnlineLyricsCandidate(candidate, LyricsSearchApplyMode.LYRICS_ONLY))
+        advanceUntilIdle()
+
+        assertEquals("[00:01.00]Hello", store.state.value.draft.embeddedLyrics)
+        assertEquals(ttml, candidate.document.rawPayload)
+        assertEquals(0, repository.saveCalls)
+        assertTrue(store.state.value.isDirty)
+    }
+
+    @Test
     fun `apply workflow online lyrics candidate imports artwork bytes into draft`() = runTest {
         val track = sampleTrack()
         val repository = FakeMusicTagsRepository(

@@ -7,10 +7,13 @@ import top.iwesley.lyn.music.core.model.resolveUiText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertSame
+import kotlin.test.assertNotNull
 import top.iwesley.lyn.music.core.model.AppLanguage
 import top.iwesley.lyn.music.core.model.AppLanguageRuntime
 import top.iwesley.lyn.music.core.model.LyricsDocument
 import top.iwesley.lyn.music.core.model.LyricsLine
+import top.iwesley.lyn.music.domain.parseCachedLyrics
+import top.iwesley.lyn.music.domain.parseEnhancedLyricsPresentation
 
 class LyricsSearchContentTypeTest {
     @Test
@@ -101,6 +104,22 @@ class LyricsSearchContentTypeTest {
         )
 
         assertEquals(LyricsSearchContentType.LINE, resolveLyricsSearchContentType(document))
+    }
+
+    @Test
+    fun `TTML content types depend on word timing rather than presence of translation`() {
+        val fixtures = listOf(
+            "<p begin=\"1s\">Line<span m:role=\"x-translation\">译文</span></p>" to LyricsSearchContentType.LINE,
+            "<p begin=\"1s\"><span begin=\"1s\" end=\"2s\">Word</span><span m:role=\"x-translation\">译文</span></p>" to LyricsSearchContentType.WORD,
+            "<p>Plain<span m:role=\"x-translation\">译文</span></p>" to LyricsSearchContentType.PLAIN,
+        )
+        fixtures.forEach { (body, expected) ->
+            val raw = "<tt xmlns:m=\"urn:metadata\"><body>$body</body></tt>"
+            val document = assertNotNull(parseCachedLyrics("managed-lrcapi", raw))
+
+            assertEquals(expected, resolveLyricsSearchContentType(document))
+            assertEquals("译文", assertNotNull(parseEnhancedLyricsPresentation(raw, document)).lines.single().translationText)
+        }
     }
 
     @Test

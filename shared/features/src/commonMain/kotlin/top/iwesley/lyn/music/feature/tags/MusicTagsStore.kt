@@ -12,7 +12,6 @@ import kotlinx.coroutines.launch
 import top.iwesley.lyn.music.core.model.AudioTagEditorPlatformService
 import top.iwesley.lyn.music.core.model.AudioTagPatch
 import top.iwesley.lyn.music.core.model.AudioTagSnapshot
-import top.iwesley.lyn.music.core.model.LyricsDocument
 import top.iwesley.lyn.music.core.model.LyricsSearchApplyMode
 import top.iwesley.lyn.music.core.model.LyricsSearchCandidate
 import top.iwesley.lyn.music.core.model.Track
@@ -22,7 +21,7 @@ import top.iwesley.lyn.music.core.mvi.BaseStore
 import top.iwesley.lyn.music.data.repository.LyricsRepository
 import top.iwesley.lyn.music.data.repository.MusicTagSaveResult
 import top.iwesley.lyn.music.data.repository.MusicTagsRepository
-import top.iwesley.lyn.music.domain.serializeLyricsDocument
+import top.iwesley.lyn.music.domain.preferredEmbeddedLyricsText
 
 data class MusicTagsRowMetadata(
     val tagLabel: String? = null,
@@ -638,11 +637,6 @@ class MusicTagsStore(
             artistName = searchState.artistName.trim().ifBlank { selectedTrack.artistName },
             albumTitle = searchState.albumTitle.trim().ifBlank { selectedTrack.albumTitle },
         )
-    }
-
-    private fun preferredEmbeddedLyricsText(document: LyricsDocument): String {
-        return document.rawPayload.takeIf { it.isNotBlank() }
-            ?: serializeLyricsDocument(document)
     }
 
     private suspend fun loadArtworkForDraft(locator: String?): ImportedArtworkResult {
