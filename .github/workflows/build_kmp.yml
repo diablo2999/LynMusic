@@ -1,9 +1,7 @@
 name: Multi-OS Desktop & Android Build
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -247,5 +245,4 @@ jobs:
             "${FILES[@]}" \
             --title "${{ steps.meta.outputs.title }}" \
             --notes-file RELEASE_NOTES.md \
-            --verify-tag \
             "${EXTRA_ARGS[@]}"
