@@ -10,7 +10,7 @@ data class PlayerLyricsStyle(
 ) {
     fun normalized(): PlayerLyricsStyle = copy(
         highlightArgb = highlightArgb or 0xff000000.toInt(),
-        fontScale = if (fontScale.isFinite()) fontScale.coerceIn(0.75f, 1.75f) else 1f,
+        fontScale = if (fontScale.isFinite()) fontScale.coerceIn(0.75f, 5.75f) else 1f,
         fontKey = fontKey?.takeIf { parseLyricsShareImportedFontHash(it) != null },
     )
 }
