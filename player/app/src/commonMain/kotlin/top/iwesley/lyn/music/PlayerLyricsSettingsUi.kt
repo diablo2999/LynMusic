@@ -170,11 +170,11 @@ private fun ColumnScope.LyricsStyleControls(
     val style = state.lyricsStyle
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(uiString(Res.string.player_lyrics_size), color = LyricsSettingsSecondaryColor, style = MaterialTheme.typography.bodyMedium)
-        LyricsSettingsPill("A−", uiString(Res.string.player_lyrics_size_decrease), enabled = style.fontScale > 0.75f, onClick = {
+        LyricsSettingsPill("A−", uiString(Res.string.player_lyrics_size_decrease), enabled = true, onClick = {
             onIntent(PlayerIntent.LyricsStyleChanged(style.copy(fontScale = stepPlayerLyricsFontScale(style.fontScale, false))))
         })
         Text("${(style.fontScale * 100).roundToInt()}%", Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium)
-        LyricsSettingsPill("A+", uiString(Res.string.player_lyrics_size_increase), enabled = style.fontScale < 5.75f, onClick = {
+        LyricsSettingsPill("A+", uiString(Res.string.player_lyrics_size_increase), enabled = true, onClick = {
             onIntent(PlayerIntent.LyricsStyleChanged(style.copy(fontScale = stepPlayerLyricsFontScale(style.fontScale, true))))
         })
     }
