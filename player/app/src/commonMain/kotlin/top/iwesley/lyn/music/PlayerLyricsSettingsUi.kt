@@ -78,7 +78,7 @@ internal fun TextStyle.withPlayerLyricsStyle(style: PlayerLyricsStyle, family: F
 )
 
 internal fun stepPlayerLyricsFontScale(scale: Float, increase: Boolean): Float =
-    ((scale * 100).roundToInt() + if (increase) 5 else -5).coerceIn(75, 175) / 100f
+    ((scale * 100).roundToInt() + if (increase) 5 else -5).coerceIn(75, 575) / 100f
 
 internal fun stepPlayerLyricsOffset(offsetMs: Long, earlier: Boolean): Long =
     normalizeUserLyricsOffset(normalizeUserLyricsOffset(offsetMs) + if (earlier) 100 else -100)
