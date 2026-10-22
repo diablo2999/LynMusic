@@ -174,7 +174,7 @@ private fun ColumnScope.LyricsStyleControls(
             onIntent(PlayerIntent.LyricsStyleChanged(style.copy(fontScale = stepPlayerLyricsFontScale(style.fontScale, false))))
         })
         Text("${(style.fontScale * 100).roundToInt()}%", Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium)
-        LyricsSettingsPill("A+", uiString(Res.string.player_lyrics_size_increase), enabled = style.fontScale < 1.75f, onClick = {
+        LyricsSettingsPill("A+", uiString(Res.string.player_lyrics_size_increase), enabled = style.fontScale < 5.75f, onClick = {
             onIntent(PlayerIntent.LyricsStyleChanged(style.copy(fontScale = stepPlayerLyricsFontScale(style.fontScale, true))))
         })
     }
